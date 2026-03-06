@@ -1,0 +1,33 @@
+apply plugin: 'java'
+apply plugin: 'org.teavm'
+
+java {
+    sourceCompatibility = JavaVersion.toVersion(rootProject.ext.javaVersion)
+    targetCompatibility = JavaVersion.toVersion(rootProject.ext.javaVersion)
+}
+
+dependencies {
+    implementation project(':core')
+    implementation "com.badlogicgames.gdx:gdx-backend-teavm:$gdxVersion"
+    implementation "org.teavm:teavm-classlib:$teavmVersion"
+    implementation "org.teavm:teavm-jso-apis:$teavmVersion"
+}
+
+teavm {
+    js {
+        mainClass = 'com.nullvoid.HtmlLauncher'
+        targetDir = file("$projectDir/webapp")
+        targetFileName = 'game.js'
+        debugInformation = false
+        sourceMapsGenerated = false
+        optimizationLevel = 'ADVANCED'
+    }
+}
+
+tasks.register('copyAssets', Copy) {
+    dependsOn 'generateJs'
+    from rootProject.file('assets')
+    into "$projectDir/webapp/assets"
+}
+
+build.dependsOn 'copyAssets'

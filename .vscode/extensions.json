@@ -1,0 +1,9 @@
+{
+  // When someone opens this project in VS Code,
+  // it will suggest installing these extensions automatically.
+  "recommendations": [
+    "vscjava.vscode-java-pack",      // Java Extension Pack (language support, debugger)
+    "vscjava.vscode-gradle",          // Gradle for Java (sidebar tasks panel)
+    "ritwickdey.LiveServer"           // Live Server (instant browser reload for testing)
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+
+    // ── PRIMARY TASK: Build web version ───────────────────────
+    // Press Ctrl+Shift+B to run this
+    {
+      "label": "Build Web (TeaVM → game.js)",
+      "type": "shell",
+      "command": "./gradlew :html:generateJs",
+      "windows": {
+        "command": ".\\gradlew.bat :html:generateJs"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true   // <-- this is what Ctrl+Shift+B runs
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      },
+      "problemMatcher": "$java"
+    },
+
+    // ── Download dependencies (run this first, once) ──────────
+    {
+      "label": "Download Dependencies",
+      "type": "shell",
+      "command": "./gradlew dependencies",
+      "windows": {
+        "command": ".\\gradlew.bat dependencies"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    },
+
+    // ── Start local web server to test game ───────────────────
+    {
+      "label": "Serve Game Locally (port 8080)",
+      "type": "shell",
+      "command": "python3 -m http.server 8080",
+      "windows": {
+        "command": "python -m http.server 8080"
+      },
+      "options": {
+        "cwd": "${workspaceFolder}/html/webapp"
+      },
+      "group": "test",
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "problemMatcher": [],
+      "isBackground": true
+    },
+
+    // ── Clean build outputs ───────────────────────────────────
+    {
+      "label": "Clean",
+      "type": "shell",
+      "command": "./gradlew clean",
+      "windows": {
+        "command": ".\\gradlew.bat clean"
+      },
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "problemMatcher": []
+    }
+
+  ]
+}

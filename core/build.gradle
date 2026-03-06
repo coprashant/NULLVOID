@@ -1,0 +1,10 @@
+apply plugin: 'java-library'
+
+java {
+    sourceCompatibility = JavaVersion.toVersion(rootProject.ext.javaVersion)
+    targetCompatibility = JavaVersion.toVersion(rootProject.ext.javaVersion)
+}
+
+dependencies {
+    api "com.badlogicgames.gdx:gdx:$gdxVersion"
+}

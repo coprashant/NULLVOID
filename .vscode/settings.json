@@ -1,0 +1,30 @@
+{
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "java.compile.nullAnalysis.mode": "automatic",
+  "java.sources.organizeImports.starThreshold": 5,
+
+  // Tell VS Code where Java source folders are
+  "java.project.sourcePaths": [
+    "core/src/main/java",
+    "html/src/main/java"
+  ],
+
+  // Gradle: use the project's own wrapper (gradlew), not a global install
+  "java.import.gradle.wrapper.enabled": true,
+  "java.import.gradle.version": "8.5",
+
+  // File associations
+  "files.associations": {
+    "*.gradle": "groovy"
+  },
+
+  // Hide clutter from explorer
+  "files.exclude": {
+    "**/.gradle": true,
+    "**/build": true,
+    "**/.classpath": true,
+    "**/.project": true,
+    "**/.settings": true,
+    "**/.factorypath": true
+  }
+}
