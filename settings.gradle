@@ -1,4 +1,5 @@
 rootProject.name = 'nullvoid'
 
 include 'core'
+include 'desktop'
 include 'html'

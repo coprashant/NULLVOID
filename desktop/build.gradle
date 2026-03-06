@@ -1,0 +1,48 @@
+
+apply plugin: 'java'
+
+java {
+    sourceCompatibility = JavaVersion.toVersion(rootProject.ext.javaVersion)
+    targetCompatibility = JavaVersion.toVersion(rootProject.ext.javaVersion)
+}
+
+dependencies {
+    implementation project(':core')
+
+    implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
+
+    implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
+}
+
+// ── Task: run the game directly from Gradle ────────────────
+
+tasks.register('run', JavaExec) {
+    dependsOn compileJava
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.nullvoid.DesktopLauncher'
+
+    // Keep the working directory at project root so assets/ is found
+    workingDir = rootProject.projectDir
+
+    // Pass JVM flags needed for LWJGL3 on newer JDKs
+    jvmArgs = []
+}
+
+// ── Task: package into a runnable JAR 
+
+jar {
+    archiveFileName = 'nullvoid-desktop.jar'
+
+    from {
+        configurations.runtimeClasspath.collect {
+            it.isDirectory() ? it : zipTree(it)
+        }
+    }
+
+    manifest {
+        attributes 'Main-Class': 'com.nullvoid.DesktopLauncher'
+    }
+
+    // Avoid duplicate META-INF files from dependencies
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}

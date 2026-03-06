@@ -1,19 +1,13 @@
 {
   "version": "2.0.0",
   "tasks": [
-
-    // ── PRIMARY TASK: Build web version ───────────────────────
-    // Press Ctrl+Shift+B to run this
     {
-      "label": "Build Web (TeaVM → game.js)",
+      "label": "Run Desktop",
       "type": "shell",
-      "command": "./gradlew :html:generateJs",
-      "windows": {
-        "command": ".\\gradlew.bat :html:generateJs"
-      },
+      "command": ".\\gradlew.bat :desktop:run",
       "group": {
         "kind": "build",
-        "isDefault": true   // <-- this is what Ctrl+Shift+B runs
+        "isDefault": true
       },
       "presentation": {
         "reveal": "always",
@@ -22,51 +16,48 @@
       },
       "problemMatcher": "$java"
     },
-
-    // ── Download dependencies (run this first, once) ──────────
     {
-      "label": "Download Dependencies",
+      "label": "Build Web (TeaVM -> game.js)",
       "type": "shell",
-      "command": "./gradlew dependencies",
-      "windows": {
-        "command": ".\\gradlew.bat dependencies"
+      "command": ".\\gradlew.bat :html:generateJs",
+      "group": "build",
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
       },
+      "problemMatcher": "$java"
+    },
+    {
+      "label": "Package Desktop JAR",
+      "type": "shell",
+      "command": ".\\gradlew.bat :desktop:jar",
       "group": "build",
       "presentation": {
         "reveal": "always",
         "panel": "shared"
       },
-      "problemMatcher": []
+      "problemMatcher": "$java"
     },
-
-    // ── Start local web server to test game ───────────────────
     {
       "label": "Serve Game Locally (port 8080)",
       "type": "shell",
-      "command": "python3 -m http.server 8080",
-      "windows": {
-        "command": "python -m http.server 8080"
-      },
+      "command": "python -m http.server 8080",
       "options": {
         "cwd": "${workspaceFolder}/html/webapp"
       },
       "group": "test",
+      "isBackground": true,
       "presentation": {
         "reveal": "always",
         "panel": "dedicated"
       },
-      "problemMatcher": [],
-      "isBackground": true
+      "problemMatcher": []
     },
-
-    // ── Clean build outputs ───────────────────────────────────
     {
       "label": "Clean",
       "type": "shell",
-      "command": "./gradlew clean",
-      "windows": {
-        "command": ".\\gradlew.bat clean"
-      },
+      "command": ".\\gradlew.bat clean",
       "group": "build",
       "presentation": {
         "reveal": "always",
@@ -74,6 +65,5 @@
       },
       "problemMatcher": []
     }
-
   ]
 }
