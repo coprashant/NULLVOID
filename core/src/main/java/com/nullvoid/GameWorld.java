@@ -1,323 +1,325 @@
 package com.nullvoid;
 
-import com.badlogic.gdx.graphics.Color;
-import com.badlogic.gdx.graphics.GL20;
-import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
-import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.utils.Array;
-
 import java.util.Random;
 
-/**
- * GameWorld — all game logic lives here.
- *
- * Responsibilities:
- *  - Scrolling the background grid
- *  - Moving the packet up/down lanes
- *  - Spawning and moving Firewall Gates
- *  - Tracking which bits (8,4,2,1) are ON
- *  - Checking if packet binary value matches the gate
- *  - Score and speed management
- */
 public class GameWorld {
 
-    // ── Layout constants ───────────────────────────────────────
-    private static final float W          = NullVoid.WORLD_W;
-    private static final float H          = NullVoid.WORLD_H;
+    private static final float WALK_SPEED  = 120f;
+    private static final float RUN_SPEED   = 220f;
+    private static final float INTRO_SPEED = 150f;
+    private static final float INTRO_DIST  = 10f;
 
-    // Four lanes, evenly spaced vertically
-    private static final int   LANE_COUNT = 4;
-    private static final float LANE_H     = H / LANE_COUNT;      // height of each lane
-    private static final float PAD_SIZE   = 60f;                  // bit pad square size
-    private static final float PACKET_SIZE= 28f;
+    private boolean introActive   = true;
+    private float   introScrolled = 0f;
 
-    // Bit pad X positions (near the left side, player runs past them)
-    private static final float PAD_X      = 120f;
+    private float speed     = 0f;
+    private float scrollDir = 1f;
 
-    // Gate constants
-    private static final float GATE_W     = 30f;
-    private static final float GATE_SPAWN_X = W + 50f;           // spawn off-screen right
-    private static final float GATE_PASS_X  = 60f;               // "passed" threshold
-
-    // ── Bit weights for each lane (top to bottom = 8,4,2,1) ───
-    private static final int[] BIT_VALUES = {8, 4, 2, 1};
-
-    // ── Game state ─────────────────────────────────────────────
-    private float  packetY;                   // packet's Y center position
-    private int    packetLane;                // 0=top lane … 3=bottom lane
-    private boolean[] bitsOn = new boolean[4]; // which bits are currently ON
-
-    private float  speed      = 180f;         // world scroll speed (px/sec)
-    private float  score      = 0;
-    private int    highScore  = 0;
+    private int     score     = 0;
+    private int     highScore = 0;
+    private float   distance  = 0f;
     private boolean gameOver  = false;
 
-    // Gate management
-    private Array<Gate> gates = new Array<>();
-    private float gateTimer   = 0f;
-    private float gateInterval= 4f;           // seconds between gates
-    private int   nextTarget  = 0;            // the decimal number on next gate
+    private float alienTimer = 0f, alienInterval = 5f;
+    private float rockTimer  = 0f, rockInterval  = 3.5f;
+    private float ceilTimer  = 0f, ceilInterval  = 8f;
+    private float gemTimer   = 0f, gemInterval   = 3f;
 
-    // Grid scroll offset
-    private float scrollOffset = 0f;
+    private Player             player;
+    private Background         background;
+    private Array<Alien>       aliens   = new Array<>();
+    private Array<Rock>        rocks    = new Array<>();
+    private Array<CeilingGap>  ceilings = new Array<>();
+    private Array<Collectible> gems     = new Array<>();
+    private Array<DustEffect>  dust     = new Array<>();
 
     private Random rng = new Random();
 
-    // ── Inner class: Gate ──────────────────────────────────────
-    static class Gate {
-        float x;           // current X position
-        int   target;      // decimal value the player must match
-        boolean passed;    // already scored this gate?
+    public void create() {
+        Alien.loadAssets();
+        Rock.loadAssets();
+        Collectible.loadAssets();
+        DustEffect.loadAssets();
 
-        Gate(float x, int target) {
-            this.x = x;
-            this.target = target;
-        }
+        player     = new Player();
+        background = new Background();
+        player.create();
+        background.create();
+        CeilingGap.loadAssets(background.getTileSheet());
+
+        reset();
     }
-
-    // ──────────────────────────────────────────────────────────
-    //  PUBLIC API
-    // ──────────────────────────────────────────────────────────
 
     public void reset() {
-        packetLane   = 2;                     // start in lane index 2 (bit "2")
-        packetY      = laneCenter(packetLane);
-        bitsOn       = new boolean[]{false, false, false, false};
-        speed        = 180f;
-        score        = 0;
-        gameOver     = false;
-        gateTimer    = 0f;
-        gateInterval = 4f;
-        gates.clear();
-        scrollOffset = 0f;
-        spawnGate();                          // put first gate immediately
+        player.reset();
+        aliens.clear();
+        rocks.clear();
+        ceilings.clear();
+        gems.clear();
+        dust.clear();
+
+        speed         = 0f;
+        scrollDir     = 1f;
+        introActive   = true;
+        introScrolled = 0f;
+        score         = 0;
+        distance      = 0f;
+        gameOver      = false;
+        alienTimer    = 0f; alienInterval = 5f;
+        rockTimer     = 0f; rockInterval  = 3.5f;
+        ceilTimer     = 0f; ceilInterval  = 8f;
+        gemTimer      = 0f;
     }
 
-    public void update(float delta) {
+    public void update(float delta, InputHandler input) {
         if (gameOver) return;
 
-        // Scroll background
-        scrollOffset += speed * delta;
+        // ── Intro sequence ─────────────────────────────────────
+        if (introActive) {
+            boolean slideComplete = player.updateIntro(delta);
 
-        // Speed ramp-up: get 5px/sec faster every second
-        speed += 5f * delta;
-        speed  = Math.min(speed, 500f);       // cap at 500
+            if (slideComplete) {
+                speed          = INTRO_SPEED;
+                scrollDir      = 1f;
+                introScrolled += INTRO_SPEED * delta * 0.04f;
+                updateObjects(delta);
+                background.update(delta, speed);
+                distance += INTRO_SPEED * delta * 0.04f;
 
-        // Score: increases with time
-        score += delta * 10f;
-
-        // Spawn gates on a timer
-        gateTimer += delta;
-        if (gateTimer >= gateInterval) {
-            gateTimer = 0f;
-            gateInterval = Math.max(2f, gateInterval - 0.1f); // gates come faster over time
-            spawnGate();
-        }
-
-        // Move gates left
-        for (Gate gate : gates) {
-            gate.x -= speed * delta;
-        }
-
-        // Check collisions
-        checkGateCollisions();
-
-        // Remove off-screen gates
-        for (int i = gates.size - 1; i >= 0; i--) {
-            if (gates.get(i).x < -100f) {
-                gates.removeIndex(i);
-            }
-        }
-    }
-
-    /** Called by NullVoid to pass input each frame */
-    public void handleInput(InputHandler input) {
-        int newLane = packetLane;
-
-        if (input.isMoveUp()   && packetLane > 0)            newLane = packetLane - 1;
-        if (input.isMoveDown() && packetLane < LANE_COUNT-1) newLane = packetLane + 1;
-
-        if (newLane != packetLane) {
-            packetLane = newLane;
-            packetY    = laneCenter(packetLane);
-            // Toggle the bit for the lane the packet just entered
-            bitsOn[packetLane] = !bitsOn[packetLane];
-        }
-    }
-
-    public void render(ShapeRenderer shapes, SpriteBatch batch, BitmapFont font) {
-        drawGrid(shapes);
-        drawBitPads(shapes, batch, font);
-        drawGates(shapes, batch, font);
-        drawPacket(shapes);
-        drawBitStatus(batch, font);
-    }
-
-    public boolean isGameOver() { return gameOver; }
-    public float   getScore()   { return score; }
-    public int     getHighScore(){ return highScore; }
-    public int     getCurrentBinaryValue() {
-        int val = 0;
-        for (int i = 0; i < 4; i++) if (bitsOn[i]) val += BIT_VALUES[i];
-        return val;
-    }
-
-    public void dispose() {}
-
-    // ──────────────────────────────────────────────────────────
-    //  PRIVATE HELPERS
-    // ──────────────────────────────────────────────────────────
-
-    /** Y center of a lane index (0 = top) */
-    private float laneCenter(int lane) {
-        // lane 0 → near top, lane 3 → near bottom
-        return H - (lane * LANE_H) - (LANE_H / 2f);
-    }
-
-    private void spawnGate() {
-        // Pick a random target between 1 and 15 (all 4-bit values)
-        nextTarget = rng.nextInt(15) + 1;
-        gates.add(new Gate(GATE_SPAWN_X, nextTarget));
-    }
-
-    private void checkGateCollisions() {
-        float packetX = 80f;  // packet is fixed at X=80
-
-        for (Gate gate : gates) {
-            if (gate.passed) continue;
-
-            // Has the gate reached the packet's X?
-            if (gate.x <= packetX + PACKET_SIZE && gate.x + GATE_W >= packetX - PACKET_SIZE) {
-                int playerValue = getCurrentBinaryValue();
-                if (playerValue == gate.target) {
-                    // ✅ Correct! Pulse through.
-                    gate.passed = true;
-                    score += 100f;
-                    if ((int)score > highScore) highScore = (int)score;
-                } else {
-                    // ❌ Wrong value — game over
-                    gameOver = true;
-                    if ((int)score > highScore) highScore = (int)score;
+                if (introScrolled >= INTRO_DIST) {
+                    introActive = false;
+                    speed       = 0f;
                 }
-            }
-        }
-    }
-
-    // ── Draw Methods ───────────────────────────────────────────
-
-    private void drawGrid(ShapeRenderer shapes) {
-        shapes.begin(ShapeRenderer.ShapeType.Line);
-        shapes.setColor(0.1f, 0.3f, 0.5f, 0.4f);  // dim blue grid lines
-
-        float spacing = 60f;
-        float offset  = scrollOffset % spacing;
-
-        // Vertical lines (moving left = gives sense of speed)
-        for (float x = -offset; x < W; x += spacing) {
-            shapes.line(x, 0, x, H);
-        }
-        // Horizontal lane dividers
-        for (int i = 1; i < LANE_COUNT; i++) {
-            float y = i * LANE_H;
-            shapes.line(0, y, W, y);
-        }
-        shapes.end();
-    }
-
-    private void drawBitPads(ShapeRenderer shapes, SpriteBatch batch, BitmapFont font) {
-        for (int i = 0; i < LANE_COUNT; i++) {
-            float centerY = laneCenter(i);
-            float padLeft = PAD_X - PAD_SIZE / 2f;
-            float padBot  = centerY - PAD_SIZE / 2f;
-
-            // Glow effect: draw a larger dim rectangle behind active pads
-            if (bitsOn[i]) {
-                shapes.begin(ShapeRenderer.ShapeType.Filled);
-                shapes.setColor(0f, 0.6f, 1f, 0.25f);
-                shapes.rect(padLeft - 8, padBot - 8, PAD_SIZE + 16, PAD_SIZE + 16);
-                shapes.end();
-            }
-
-            // Main pad
-            shapes.begin(ShapeRenderer.ShapeType.Filled);
-            if (bitsOn[i]) {
-                shapes.setColor(0f, 0.8f, 1f, 1f);   // bright cyan = ON
             } else {
-                shapes.setColor(0.2f, 0.2f, 0.3f, 1f); // dim grey = OFF
+                background.update(delta, 0f);
             }
-            shapes.rect(padLeft, padBot, PAD_SIZE, PAD_SIZE);
-            shapes.end();
+            return;
+        }
 
-            // Pad border
-            shapes.begin(ShapeRenderer.ShapeType.Line);
-            shapes.setColor(bitsOn[i] ? Color.CYAN : Color.DARK_GRAY);
-            shapes.rect(padLeft, padBot, PAD_SIZE, PAD_SIZE);
-            shapes.end();
+        // ── Normal gameplay ────────────────────────────────────
+        player.update(delta, input);
 
-            // Bit value label (8, 4, 2, 1)
-            batch.begin();
-            font.setColor(bitsOn[i] ? Color.WHITE : Color.GRAY);
-            font.draw(batch, String.valueOf(BIT_VALUES[i]),
-                      PAD_X - 6f, centerY + 7f);
-            batch.end();
+        Player.MoveState ms = player.getMoveState();
+
+        // Snap speed instantly based on input — no ramp
+        switch (ms) {
+            case WALK_RIGHT: speed = WALK_SPEED; scrollDir =  1f; break;
+            case RUN_RIGHT:  speed = RUN_SPEED;  scrollDir =  1f; break;
+            case WALK_LEFT:  speed = WALK_SPEED; scrollDir = -1f; break;
+            case RUN_LEFT:   speed = RUN_SPEED;  scrollDir = -1f; break;
+            default:         speed = 0f;                          break;
+        }
+
+        if (scrollDir > 0 && speed > 0)
+            distance += speed * delta * 0.04f;
+
+        background.update(delta, speed * scrollDir);
+
+        spawnAliens(delta);
+        spawnRocks(delta);
+        spawnCeilings(delta);
+        spawnGems(delta);
+
+        updateObjects(delta);
+        checkCollisions();
+    }
+
+    private void updateObjects(float delta) {
+        float worldVel = speed * scrollDir;
+
+        for (int i = aliens.size - 1; i >= 0; i--) {
+            Alien a = aliens.get(i);
+            a.update(delta, worldVel, rocks);
+            if (a.isRemovable() || a.isOffScreen())
+                aliens.removeIndex(i);
+        }
+        for (int i = rocks.size - 1; i >= 0; i--) {
+            Rock r = rocks.get(i);
+            r.update(delta, worldVel);
+            if (r.isOffScreen()) rocks.removeIndex(i);
+        }
+        for (int i = ceilings.size - 1; i >= 0; i--) {
+            CeilingGap c = ceilings.get(i);
+            c.update(delta, worldVel);
+            if (c.isOffScreen()) ceilings.removeIndex(i);
+        }
+        for (int i = gems.size - 1; i >= 0; i--) {
+            Collectible g = gems.get(i);
+            g.update(delta, worldVel);
+            if (g.isOffScreen() || g.isCollected())
+                gems.removeIndex(i);
+        }
+        for (int i = dust.size - 1; i >= 0; i--) {
+            DustEffect d = dust.get(i);
+            d.update(delta);
+            if (!d.isActive()) dust.removeIndex(i);
         }
     }
 
-    private void drawGates(ShapeRenderer shapes, SpriteBatch batch, BitmapFont font) {
-        for (Gate gate : gates) {
-            // Gate bar
-            shapes.begin(ShapeRenderer.ShapeType.Filled);
-            shapes.setColor(1f, 0.2f, 0.5f, 0.7f);   // neon pink firewall
-            shapes.rect(gate.x, 0, GATE_W, H);
-            shapes.end();
-
-            // Gate border glow
-            shapes.begin(ShapeRenderer.ShapeType.Line);
-            shapes.setColor(1f, 0.5f, 0.8f, 1f);
-            shapes.rect(gate.x - 2, 0, GATE_W + 4, H);
-            shapes.end();
-
-            // Target number label
-            batch.begin();
-            font.setColor(Color.WHITE);
-            font.draw(batch, String.valueOf(gate.target),
-                      gate.x + 2f, H / 2f + 8f);
-            batch.end();
-        }
-    }
-
-    private void drawPacket(ShapeRenderer shapes) {
-        float px = 80f;
-        float py = packetY;
-
-        // Outer glow
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(0f, 1f, 0.8f, 0.2f);
-        shapes.circle(px, py, PACKET_SIZE + 10);
-
-        // Packet body
-        shapes.setColor(0f, 1f, 0.8f, 1f);   // neon green-cyan
-        shapes.circle(px, py, PACKET_SIZE);
-
-        // Inner highlight
-        shapes.setColor(1f, 1f, 1f, 0.6f);
-        shapes.circle(px - 6f, py + 6f, PACKET_SIZE * 0.3f);
-        shapes.end();
-    }
-
-    private void drawBitStatus(SpriteBatch batch, BitmapFont font) {
-        // Show current binary value in the HUD (top left)
-        int val = getCurrentBinaryValue();
-        String binary = String.format("%4s",
-                         Integer.toBinaryString(val)).replace(' ', '0');
-
+    public void render(SpriteBatch batch) {
         batch.begin();
-        font.setColor(Color.CYAN);
-        font.draw(batch, "BITS: " + binary + "  =" + val,
-                  10f, H - 10f);
-        font.draw(batch, "SCORE: " + (int)score,
-                  10f, H - 30f);
+        background.render(batch);
+        for (Collectible g : gems)     g.render(batch);
+        for (Rock        r : rocks)    r.render(batch);
+        for (CeilingGap  c : ceilings) c.render(batch);
+        for (Alien       a : aliens)   a.render(batch);
+        for (DustEffect  d : dust)     d.render(batch);
+        player.render(batch);
         batch.end();
+    }
+
+    public void dispose() {
+        player.dispose();
+        background.dispose();
+        Alien.disposeAssets();
+        Rock.disposeAssets();
+        Collectible.disposeAssets();
+        DustEffect.disposeAssets();
+    }
+
+    public boolean isGameOver()   { return gameOver;  }
+    public int     getScore()     { return score;     }
+    public int     getHighScore() { return highScore; }
+    public int     getLives()     { return player.getLives(); }
+    public int     getDistance()  { return (int)distance; }
+    public float   getSpeed()     { return speed; }
+    public boolean isIntro()      { return introActive; }
+
+    private void spawnAliens(float delta) {
+        if (scrollDir < 0 || speed < 10f) return;
+        alienTimer   += delta;
+        alienInterval = Math.max(2.5f, alienInterval - 0.003f * delta);
+        if (alienTimer < alienInterval) return;
+        alienTimer = 0f;
+        if (rng.nextBoolean()) {
+            aliens.add(Alien.createWalker(NullVoid.W + 60f));
+        } else {
+            aliens.add(Alien.createPatrol(NullVoid.W + 60f, 55f));
+        }
+    }
+
+    private void spawnRocks(float delta) {
+        if (scrollDir < 0 || speed < 10f) return;
+        rockTimer   += delta;
+        rockInterval = Math.max(2.2f, rockInterval - 0.002f * delta);
+        if (rockTimer < rockInterval) return;
+        rockTimer = 0f;
+        rocks.add(new Rock(NullVoid.W + 60f));
+        if (rng.nextFloat() < 0.25f)
+            rocks.add(new Rock(NullVoid.W + 180f));
+    }
+
+    private void spawnCeilings(float delta) {
+        if (scrollDir < 0 || speed < 10f) return;
+        ceilTimer += delta;
+        if (ceilTimer < ceilInterval) return;
+        ceilTimer    = 0f;
+        ceilInterval = Math.max(5f, ceilInterval - 0.05f);
+        ceilings.add(new CeilingGap(NullVoid.W + 60f));
+    }
+
+    private void spawnGems(float delta) {
+        if (speed < 10f) return;
+        gemTimer += delta;
+        if (gemTimer < gemInterval) return;
+        gemTimer = 0f;
+        float spawnX = NullVoid.W + 60f;
+        for (Rock r : rocks) {
+            if (Math.abs(r.getX() - spawnX) < 80f) return;
+        }
+        int count = rng.nextInt(3) + 1;
+        for (int i = 0; i < count; i++)
+            gems.add(new Collectible(spawnX + i * 40f));
+    }
+
+    private void checkCollisions() {
+        for (Rock r : rocks) {
+            if (r.isPassed()) continue;
+            if (overlaps(player.hitX(), player.hitY(),
+                         player.hitW(), player.hitH(),
+                         r.hitX(), r.hitY(),
+                         r.hitW(), r.hitH())) {
+                triggerHit();
+                return;
+            }
+            if (r.getX() + Rock.SIZE < player.getX()) r.markPassed();
+        }
+
+        for (CeilingGap c : ceilings) {
+            if (c.isPassed()) continue;
+            if (player.isJumping() &&
+                overlaps(player.hitX(), player.hitY(),
+                         player.hitW(), player.hitH(),
+                         c.hitX(), c.hitY(),
+                         c.hitW(), c.hitH())) {
+                triggerHit();
+            }
+            if (c.getX() + CeilingGap.GAP_WIDTH < player.getX())
+                c.markPassed();
+        }
+
+        for (Alien a : aliens) {
+            if (a.isDead()) continue;
+
+            boolean stomped = player.isJumping()
+                && overlaps(player.stompX(), player.stompY(),
+                            player.stompW(), player.stompH(),
+                            a.headX(), a.headY(),
+                            a.headW(), a.headH());
+            if (stomped) {
+                a.die();
+                score += 10;
+                spawnDust(a.getX(), a.getY() + Alien.SIZE * 0.5f);
+                continue;
+            }
+
+            if (!player.isInvincible() &&
+                overlaps(player.hitX(), player.hitY(),
+                         player.hitW(), player.hitH(),
+                         a.hitX(), a.hitY(),
+                         a.hitW(), a.hitH())) {
+                boolean died = player.hit();
+                spawnDust(player.getX(), player.getY());
+                if (died) triggerGameOver();
+            }
+        }
+
+        for (Collectible g : gems) {
+            if (g.isCollected()) continue;
+            if (overlaps(player.hitX(), player.hitY(),
+                         player.hitW(), player.hitH(),
+                         g.hitX(), g.hitY(),
+                         g.hitW(), g.hitH())) {
+                g.collect();
+                score += 5;
+                spawnDust(g.getX(), g.getY());
+            }
+        }
+    }
+
+    private void triggerHit() {
+        boolean died = player.hit();
+        spawnDust(player.getX(), player.getY() + Player.SIZE);
+        if (died) triggerGameOver();
+    }
+
+    private void triggerGameOver() {
+        gameOver = true;
+        int finalScore = score + getDistance();
+        if (finalScore > highScore) highScore = finalScore;
+    }
+
+    private void spawnDust(float x, float y) {
+        DustEffect d = new DustEffect();
+        d.play(x, y);
+        dust.add(d);
+    }
+
+    private boolean overlaps(float ax, float ay, float aw, float ah,
+                              float bx, float by, float bw, float bh) {
+        return ax < bx + bw && ax + aw > bx
+            && ay < by + bh && ay + ah > by;
     }
 }

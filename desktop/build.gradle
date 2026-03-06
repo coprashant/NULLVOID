@@ -18,13 +18,10 @@ dependencies {
 
 tasks.register('run', JavaExec) {
     dependsOn compileJava
-    classpath = sourceSets.main.runtimeClasspath
+    classpath = files(sourceSets.main.runtimeClasspath, 
+                      rootProject.file('assets'))
     mainClass = 'com.nullvoid.DesktopLauncher'
-
-    // Keep the working directory at project root so assets/ is found
     workingDir = rootProject.projectDir
-
-    // Pass JVM flags needed for LWJGL3 on newer JDKs
     jvmArgs = []
 }
 
