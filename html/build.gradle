@@ -16,11 +16,11 @@ dependencies {
 teavm {
     js {
         mainClass = 'com.nullvoid.HtmlLauncher'
-        targetDir = file("$projectDir/webapp")
+        outputDir = file("$projectDir/webapp")
         targetFileName = 'game.js'
         debugInformation = false
-        sourceMapsGenerated = false
-        optimizationLevel = 'ADVANCED'
+        sourceMap = false
+        obfuscated = true
     }
 }
 
