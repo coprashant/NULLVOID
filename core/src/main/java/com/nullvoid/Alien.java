@@ -50,11 +50,12 @@ public class Alien {
                               Animation.PlayMode.NORMAL);
 
         // Jump plays once then holds the last frame until landing
-        jumpAnim  = buildAnim(jumpTex,  32, 32, 4, 0.10f,
+        // Alien_jump.png is 192x32 = 6 frames at 32x32
+        jumpAnim  = buildAnim(jumpTex,  32, 32, 6, 0.10f,
                               Animation.PlayMode.NORMAL);
 
         runAnimL  = buildAnimFlipped(runTex,  32, 32, 6, 0.10f);
-        jumpAnimL = buildAnimFlipped(jumpTex, 32, 32, 4, 0.10f);
+        jumpAnimL = buildAnimFlipped(jumpTex, 32, 32, 6, 0.10f);
     }
 
     public static void disposeAssets() {
