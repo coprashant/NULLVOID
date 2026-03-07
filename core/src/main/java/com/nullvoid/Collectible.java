@@ -8,11 +8,11 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
  */
 public class Collectible {
 
-    public static final float SIZE = 28f;
+    public static final float SIZE = 25f;   
     private static Texture texture;
 
-    private float x, y;
-    private float bobTime  = 0f;
+    private float   x, y;
+    private float   bobTime   = 0f;
     private boolean collected = false;
 
     public static void loadAssets() {
@@ -37,14 +37,14 @@ public class Collectible {
 
     public void render(SpriteBatch batch) {
         if (!collected)
-            batch.draw(texture, x - SIZE/2f, y, SIZE, SIZE);
+            batch.draw(texture, x - SIZE / 2f, y, SIZE, SIZE);
     }
 
-    public float   getX()          { return x; }
-    public float getY()          { return y; } 
-    public boolean isCollected()   { return collected; }
-    public void    collect()       { collected = true; }
-    public boolean isOffScreen()   { return x < -SIZE; }
+    public float   getX()        { return x; }
+    public float   getY()        { return y; }
+    public boolean isCollected() { return collected; }
+    public void    collect()     { collected = true; }
+    public boolean isOffScreen() { return x < -SIZE; }
 
     public float hitX() { return x - SIZE * 0.45f; }
     public float hitY() { return y; }

@@ -20,9 +20,9 @@ public class GameWorld {
     private boolean introActive   = true;
     private float   introScrolled = 0f;
 
-    private float speed      = 0f;   // current (lerped) speed
-    private float targetSpeed = 0f;  // what speed is chasing
-    private float scrollDir  = 1f;
+    private float speed       = 0f;
+    private float targetSpeed = 0f;
+    private float scrollDir   = 1f;
 
     private int     score     = 0;
     private int     highScore = 0;
@@ -40,11 +40,12 @@ public class GameWorld {
 
     private Player             player;
     private Background         background;
-    private Array<Alien>       aliens   = new Array<>();
-    private Array<Rock>        rocks    = new Array<>();
-    private Array<CeilingGap>  ceilings = new Array<>();
-    private Array<Collectible> gems     = new Array<>();
-    private Array<DustEffect>  dust     = new Array<>();
+    private Array<Alien>       aliens    = new Array<>();
+    private Array<Rock>        rocks     = new Array<>();
+    private Array<CeilingGap>  ceilings  = new Array<>();
+    private Array<Collectible> gems      = new Array<>();
+    private Array<DustEffect>  dust      = new Array<>();
+    private Array<SparkleEffect> sparkles = new Array<>();  // ← gem collect fx
 
     private Random rng = new Random();
 
@@ -55,6 +56,7 @@ public class GameWorld {
         Rock.loadAssets();
         Collectible.loadAssets();
         DustEffect.loadAssets();
+        SparkleEffect.loadAssets();                         // ← load sparkle
 
         player     = new Player();
         background = new Background();
@@ -72,6 +74,7 @@ public class GameWorld {
         ceilings.clear();
         gems.clear();
         dust.clear();
+        sparkles.clear();                                   // ← clear sparkles
 
         speed         = 0f;
         targetSpeed   = 0f;
@@ -124,7 +127,6 @@ public class GameWorld {
 
         Player.MoveState ms = player.getMoveState();
 
-        // Determine target speed from input
         switch (ms) {
             case WALK_RIGHT: targetSpeed = WALK_SPEED; scrollDir =  1f; break;
             case RUN_RIGHT:  targetSpeed = RUN_SPEED;  scrollDir =  1f; break;
@@ -133,10 +135,8 @@ public class GameWorld {
             default:         targetSpeed = 0f;                          break;
         }
 
-        // Lerp current speed toward target — smooth acceleration/deceleration
         speed += (targetSpeed - speed) * Math.min(delta * SPEED_LERP, 1f);
 
-        // Hit stun — clamp effective speed while the stun window is active
         float effectiveSpeed = speed;
         if (hitStunTimer > 0f) {
             hitStunTimer  -= delta;
@@ -146,7 +146,6 @@ public class GameWorld {
         if (scrollDir > 0 && effectiveSpeed > 0)
             distance += effectiveSpeed * delta * 0.04f;
 
-        // Distance-based difficulty scaling (0 → 1 over 500 m)
         float t = Math.min(distance / 500f, 1f);
         alienInterval = 5f   - t * 2.5f;
         rockInterval  = 3.5f - t * 1.3f;
@@ -171,11 +170,12 @@ public class GameWorld {
     public void render(SpriteBatch batch) {
         batch.begin();
         background.render(batch);
-        for (Collectible g : gems)     g.render(batch);
-        for (Rock        r : rocks)    r.render(batch);
-        for (CeilingGap  c : ceilings) c.render(batch);
-        for (Alien       a : aliens)   a.render(batch);
-        for (DustEffect  d : dust)     d.render(batch);
+        for (Collectible  g : gems)     g.render(batch);
+        for (Rock         r : rocks)    r.render(batch);
+        for (CeilingGap   c : ceilings) c.render(batch);
+        for (Alien        a : aliens)   a.render(batch);
+        for (DustEffect   d : dust)     d.render(batch);
+        for (SparkleEffect s : sparkles) s.render(batch); 
         player.render(batch);
         batch.end();
     }
@@ -187,17 +187,18 @@ public class GameWorld {
         Rock.disposeAssets();
         Collectible.disposeAssets();
         DustEffect.disposeAssets();
+        SparkleEffect.disposeAssets();                    
     }
 
     // ── Accessors ──────────────────────────────────────────────
 
-    public boolean isGameOver()   { return gameOver;  }
-    public int     getScore()     { return score;     }
-    public int     getHighScore() { return highScore; }
-    public int     getLives()     { return player.getLives(); }
-    public int     getDistance()  { return (int)distance; }
-    public float   getSpeed()     { return speed; }
-    public boolean isIntro()      { return introActive; }
+    public boolean isGameOver()         { return gameOver;  }
+    public int     getScore()           { return score;     }
+    public int     getHighScore()       { return highScore; }
+    public int     getLives()           { return player.getLives(); }
+    public int     getDistance()        { return (int)distance; }
+    public float   getSpeed()           { return speed; }
+    public boolean isIntro()            { return introActive; }
     public void    setHighScore(int hs) { highScore = hs; }
 
     // ── Spawning ───────────────────────────────────────────────
@@ -278,6 +279,11 @@ public class GameWorld {
             d.update(delta);
             if (!d.isActive()) dust.removeIndex(i);
         }
+        for (int i = sparkles.size - 1; i >= 0; i--) {   // ← update sparkles
+            SparkleEffect s = sparkles.get(i);
+            s.update(delta);
+            if (!s.isActive()) sparkles.removeIndex(i);
+        }
     }
 
     // ── Collision ──────────────────────────────────────────────
@@ -296,7 +302,7 @@ public class GameWorld {
             if (r.getX() + Rock.SIZE < player.getX()) r.markPassed();
         }
 
-        // Ceiling gaps — hitbox height handles selectivity, no isJumping() gate
+        // Ceiling gaps
         for (CeilingGap c : ceilings) {
             if (c.isPassed()) continue;
             if (overlaps(player.hitX(), player.hitY(),
@@ -336,7 +342,7 @@ public class GameWorld {
             }
         }
 
-        // Gems
+        // Gems — sparkle on collect, dust stays for hits only
         for (Collectible g : gems) {
             if (g.isCollected()) continue;
             if (overlaps(player.hitX(), player.hitY(),
@@ -345,7 +351,7 @@ public class GameWorld {
                          g.hitW(), g.hitH())) {
                 g.collect();
                 score += 5;
-                spawnDust(g.getX(), g.getY());
+                spawnSparkle(g.getX(), g.getY());          // ← sparkle here
             }
         }
     }
@@ -358,7 +364,6 @@ public class GameWorld {
         if (died) {
             triggerGameOver();
         } else {
-            // Activate hit stun — world slows briefly so player isn't chain-hit
             hitStunTimer = HIT_STUN_DURATION;
         }
     }
@@ -373,6 +378,12 @@ public class GameWorld {
         DustEffect d = new DustEffect();
         d.play(x, y);
         dust.add(d);
+    }
+
+    private void spawnSparkle(float x, float y) {
+        SparkleEffect s = new SparkleEffect();
+        s.play(x, y);
+        sparkles.add(s);
     }
 
     private boolean overlaps(float ax, float ay, float aw, float ah,

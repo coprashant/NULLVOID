@@ -11,8 +11,9 @@ public class DesktopLauncher {
                 new Lwjgl3ApplicationConfiguration();
 
         config.setTitle("N U L L V O I D");
-        config.setWindowedMode(800, 480);
-        config.setResizable(false);
+        config.setWindowedMode(960, 540);
+        config.setResizable(true);
+        config.setWindowPosition(-1, -1);
         config.setForegroundFPS(60);
         config.useVsync(true);
 
