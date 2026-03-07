@@ -28,15 +28,18 @@ public class Alien {
     private static final float GRAVITY      = -700f;
     private static final float JUMP_FORCE   =  360f;
 
-    private static Texture   runTex, idleTex, deathTex;
-    private static Animation<TextureRegion> runAnim, runAnimL,
-                                            idleAnim, deathAnim;
+    private static Texture   runTex, idleTex, jumpTex, deathTex;
+    private static Animation<TextureRegion> runAnim,   runAnimL,
+                                            idleAnim,
+                                            jumpAnim,  jumpAnimL,
+                                            deathAnim;
 
     // ── Asset loading ──────────────────────────────────────────
 
     public static void loadAssets() {
         runTex   = new Texture("Alien_run.png");
         idleTex  = new Texture("Alien_idle.png");
+        jumpTex  = new Texture("Alien_jump.png");
         deathTex = new Texture("Alien_death.png");
 
         runAnim   = buildAnim(runTex,   32, 32, 6, 0.10f,
@@ -45,12 +48,19 @@ public class Alien {
                               Animation.PlayMode.LOOP);
         deathAnim = buildAnim(deathTex, 32, 32, 4, 0.12f,
                               Animation.PlayMode.NORMAL);
-        runAnimL  = buildAnimFlipped(runTex, 32, 32, 6, 0.10f);
+
+        // Jump plays once then holds the last frame until landing
+        jumpAnim  = buildAnim(jumpTex,  32, 32, 4, 0.10f,
+                              Animation.PlayMode.NORMAL);
+
+        runAnimL  = buildAnimFlipped(runTex,  32, 32, 6, 0.10f);
+        jumpAnimL = buildAnimFlipped(jumpTex, 32, 32, 4, 0.10f);
     }
 
     public static void disposeAssets() {
         if (runTex   != null) runTex.dispose();
         if (idleTex  != null) idleTex.dispose();
+        if (jumpTex  != null) jumpTex.dispose();
         if (deathTex != null) deathTex.dispose();
     }
 
@@ -99,6 +109,7 @@ public class Alien {
                 y        = Player.GROUND_Y;
                 velY     = 0f;
                 onGround = true;
+                stateTime = 0f;  // reset so run anim starts clean on landing
             }
         }
 
@@ -107,7 +118,6 @@ public class Alien {
             for (Rock rock : rocks) {
                 if (isApproachingRock(rock, worldSpeed)) {
                     if (type == Type.WALKER) {
-                        // Walkers always jump over rocks
                         jump();
                     } else {
                         float rockCenterX = rock.hitX() + rock.hitW() * 0.5f;
@@ -116,8 +126,7 @@ public class Alien {
                         if (rockInZone) {
                             jump();
                         } else {
-                            // Rock is outside patrol range — just flip away
-                            velX = -velX;
+                            velX         = -velX;
                             jumpCooldown = 1.0f;
                         }
                     }
@@ -148,15 +157,19 @@ public class Alien {
     // ── Render ─────────────────────────────────────────────────
 
     public void render(SpriteBatch batch) {
-        Animation<TextureRegion> anim;
+        TextureRegion frame;
+
         if (dead) {
-            anim = deathAnim;
+            frame = deathAnim.getKeyFrame(stateTime);
+        } else if (!onGround) {
+            // Airborne — play jump anim facing the correct direction
+            frame = (velX < 0 ? jumpAnimL : jumpAnim).getKeyFrame(stateTime);
         } else if (velX < 0) {
-            anim = runAnimL;
+            frame = runAnimL.getKeyFrame(stateTime);
         } else {
-            anim = runAnim;
+            frame = runAnim.getKeyFrame(stateTime);
         }
-        TextureRegion frame = anim.getKeyFrame(stateTime);
+
         batch.draw(frame, x - SIZE / 2f, y, SIZE, SIZE);
     }
 
@@ -189,17 +202,15 @@ public class Alien {
         velY         = JUMP_FORCE;
         onGround     = false;
         jumpCooldown = 1.2f;
+        stateTime    = 0f;   // reset so jump anim plays from frame 0
     }
-
 
     private boolean isApproachingRock(Rock rock, float worldSpeed) {
         if (Math.abs(y - Player.GROUND_Y) > 4f) return false;
 
         float rockLeft  = rock.hitX();
         float rockRight = rock.hitX() + rock.hitW();
-
-        // Scale look-ahead so aliens react in time at high world speeds
-        float lookDist = SIZE * 0.8f + Math.abs(worldSpeed) * 0.15f;
+        float lookDist  = SIZE * 0.8f + Math.abs(worldSpeed) * 0.15f;
 
         if (velX < 0) {
             float frontX = x - SIZE * 0.3f;
@@ -226,8 +237,7 @@ public class Alien {
     }
 
     private static Animation<TextureRegion> buildAnimFlipped(
-            Texture tex, int fw, int fh,
-            int count, float spd) {
+            Texture tex, int fw, int fh, int count, float spd) {
         TextureRegion[][] g = TextureRegion.split(tex, fw, fh);
         TextureRegion[] frames = new TextureRegion[count];
         for (int i = 0; i < count; i++) {
