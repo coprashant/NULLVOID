@@ -8,7 +8,7 @@ java {
 
 dependencies {
     implementation project(':core')
-    implementation "com.badlogicgames.gdx:gdx-backend-teavm:$gdxVersion"
+    implementation "com.github.xpenatan.gdx-teavm:backend-teavm:1.0.5"
     implementation "org.teavm:teavm-classlib:$teavmVersion"
     implementation "org.teavm:teavm-jso-apis:$teavmVersion"
 }
@@ -25,7 +25,7 @@ teavm {
 }
 
 tasks.register('copyAssets', Copy) {
-    dependsOn 'generateJs'
+    dependsOn 'generateJavaScript'
     from rootProject.file('assets')
     into "$projectDir/webapp/assets"
 }

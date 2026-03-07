@@ -4,19 +4,15 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
-/**
- * CeilingGap — a low-hanging ceiling section the player must NOT jump into.
- * Player needs to stay on the ground and pass underneath.
- *
- * Uses ceiling/wall tiles from RunnerTileSet row 0 (top cave tiles).
- */
+
 public class CeilingGap {
 
-    public static final float TILE     = 32f;
-    public static final float CEILING_Y = NullVoid.H - TILE * 2f;
-    public static final float GAP_WIDTH = 96f;  // width of the low section
+    public static final float TILE      = 32f;
+    public static final float GAP_WIDTH = 96f;
 
-    private float x;
+    public static final float HANG_BOTTOM = 110f;
+
+    private float   x;
     private boolean passed = false;
 
     private static Texture       tileSheet;
@@ -25,7 +21,7 @@ public class CeilingGap {
     public static void loadAssets(Texture sheet) {
         tileSheet = sheet;
         TextureRegion[][] grid = TextureRegion.split(sheet, 24, 24);
-        ceilTile = grid[5][0];   // dark floor tile used as ceiling
+        ceilTile = grid[5][0];
     }
 
     public CeilingGap(float x) {
@@ -37,24 +33,23 @@ public class CeilingGap {
     }
 
     public void render(SpriteBatch batch) {
-        // Draw a row of ceiling tiles hanging down
+        float hangHeight = NullVoid.H - HANG_BOTTOM;
         int numTiles = (int)(GAP_WIDTH / TILE) + 1;
         for (int i = 0; i < numTiles; i++) {
             batch.draw(ceilTile,
                        x + i * TILE,
-                       CEILING_Y,
-                       TILE, TILE * 3f);  // tall hanging section
+                       HANG_BOTTOM,
+                       TILE, hangHeight);
         }
     }
 
-    public float   getX()        { return x; }
-    public boolean isPassed()    { return passed; }
-    public void    markPassed()  { passed = true; }
-    public boolean isOffScreen() { return x + GAP_WIDTH < 0; }
+    public float   getX()       { return x; }
+    public boolean isPassed()   { return passed; }
+    public void    markPassed() { passed = true; }
+    public boolean isOffScreen(){ return x + GAP_WIDTH < 0; }
 
-    // Hitbox — the dangerous low area
     public float hitX() { return x; }
-    public float hitY() { return CEILING_Y - 4f; }
+    public float hitY() { return HANG_BOTTOM; }
     public float hitW() { return GAP_WIDTH; }
-    public float hitH() { return NullVoid.H - CEILING_Y; }
+    public float hitH() { return NullVoid.H - HANG_BOTTOM; }
 }

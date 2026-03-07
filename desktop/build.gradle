@@ -1,4 +1,3 @@
-
 apply plugin: 'java'
 
 java {
@@ -8,38 +7,37 @@ java {
 
 dependencies {
     implementation project(':core')
-
     implementation "com.badlogicgames.gdx:gdx-backend-lwjgl3:$gdxVersion"
-
     implementation "com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-desktop"
 }
 
-// ── Task: run the game directly from Gradle ────────────────
-
-tasks.register('run', JavaExec) {
-    dependsOn compileJava
-    classpath = files(sourceSets.main.runtimeClasspath, 
-                      rootProject.file('assets'))
-    mainClass = 'com.nullvoid.DesktopLauncher'
-    workingDir = rootProject.projectDir
-    jvmArgs = []
-}
-
-// ── Task: package into a runnable JAR 
-
+// Fat JAR — bundles all dependencies + assets into one file
 jar {
     archiveFileName = 'nullvoid-desktop.jar'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
+    manifest {
+        attributes 'Main-Class': 'com.nullvoid.DesktopLauncher'
+    }
+
+    // Include all dependency JARs
     from {
         configurations.runtimeClasspath.collect {
             it.isDirectory() ? it : zipTree(it)
         }
     }
 
-    manifest {
-        attributes 'Main-Class': 'com.nullvoid.DesktopLauncher'
+    // Bundle assets directly inside the JAR
+    from(rootProject.file('assets')) {
+        into ''  
     }
+}
 
-    // Avoid duplicate META-INF files from dependencies
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+tasks.register('run', JavaExec) {
+    dependsOn compileJava
+    classpath = files(sourceSets.main.runtimeClasspath,
+                      rootProject.file('assets'))
+    mainClass = 'com.nullvoid.DesktopLauncher'
+    workingDir = rootProject.projectDir
+    jvmArgs = []
 }

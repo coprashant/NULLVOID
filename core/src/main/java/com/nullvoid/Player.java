@@ -25,10 +25,11 @@ public class Player {
     private int lives = MAX_LIVES;
 
     private float   y;
-    private float   velY       = 0f;
-    private boolean jumping    = false;
-    private boolean dead       = false;
-    private boolean facingLeft = false;
+    private float   velY            = 0f;
+    private boolean jumping         = false;
+    private boolean dead            = false;
+    private boolean facingLeft      = false;
+    private boolean landedThisFrame = false;   // ← new
 
     private float invincibleTimer = 0f;
     private static final float INVINCIBLE_DURATION = 1.5f;
@@ -46,6 +47,8 @@ public class Player {
                                      idleAnim, idleAnimL,
                                      jumpAnim, jumpAnimL,
                                      deathAnim;
+
+    // ── Lifecycle ──────────────────────────────────────────────
 
     public void create() {
         runTex   = new Texture("Astronaut_Run.png");
@@ -82,7 +85,10 @@ public class Player {
         invincibleTimer = 0f;
         introMoving     = true;
         introX          = INTRO_START_X;
+        landedThisFrame = false;
     }
+
+    // ── Intro ──────────────────────────────────────────────────
 
     public boolean updateIntro(float delta) {
         stateTime += delta;
@@ -104,8 +110,11 @@ public class Player {
         return true;
     }
 
+    // ── Update ─────────────────────────────────────────────────
+
     public void update(float delta, InputHandler input) {
-        stateTime += delta;
+        stateTime       += delta;
+        landedThisFrame  = false;   // reset every frame before physics
         if (invincibleTimer > 0f) invincibleTimer -= delta;
         if (dead) return;
 
@@ -113,8 +122,7 @@ public class Player {
         boolean right = input.isRight();
         boolean shift = input.isShift();
 
-        // ── Direction and move state ───────────────────────────
-        // Always update facing and moveState regardless of jumping
+        // Direction and move state
         if (left && !right) {
             moveState  = shift ? MoveState.RUN_LEFT : MoveState.WALK_LEFT;
             facingLeft = true;
@@ -125,14 +133,13 @@ public class Player {
             moveState = MoveState.IDLE;
         }
 
-        // ── Animation — jump anim takes priority when airborne ─
+        // Animation — jump takes priority while airborne
         if (!jumping) {
             animState = (moveState == MoveState.IDLE)
                         ? AnimState.IDLE : AnimState.RUN;
         }
-        // While jumping, animState stays JUMP — facing still updates above
 
-        // ── Jump ───────────────────────────────────────────────
+        // Jump
         if (input.isJump() && !jumping) {
             velY      = JUMP_FORCE;
             jumping   = true;
@@ -140,20 +147,23 @@ public class Player {
             stateTime = 0f;
         }
 
-        // ── Gravity ────────────────────────────────────────────
+        // Gravity + landing detection
         if (jumping) {
             velY += GRAVITY * delta;
             y    += velY * delta;
             if (y <= GROUND_Y) {
-                y         = GROUND_Y;
-                velY      = 0f;
-                jumping   = false;
-                animState = (moveState == MoveState.IDLE)
-                            ? AnimState.IDLE : AnimState.RUN;
-                stateTime = 0f;
+                y               = GROUND_Y;
+                velY            = 0f;
+                jumping         = false;
+                landedThisFrame = true;   // ← set on the frame we touch down
+                animState       = (moveState == MoveState.IDLE)
+                                  ? AnimState.IDLE : AnimState.RUN;
+                stateTime       = 0f;
             }
         }
     }
+
+    // ── Hit / death ────────────────────────────────────────────
 
     public boolean hit() {
         if (invincibleTimer > 0f) return false;
@@ -168,6 +178,8 @@ public class Player {
         return false;
     }
 
+    // ── Render ─────────────────────────────────────────────────
+
     public void render(SpriteBatch batch) {
         if (invincibleTimer > 0f) {
             if (((int)(invincibleTimer * 10f) % 2) == 0) return;
@@ -181,9 +193,13 @@ public class Player {
     }
 
     public void dispose() {
-        runTex.dispose(); idleTex.dispose();
-        jumpTex.dispose(); deathTex.dispose();
+        runTex.dispose();
+        idleTex.dispose();
+        jumpTex.dispose();
+        deathTex.dispose();
     }
+
+    // ── Accessors ──────────────────────────────────────────────
 
     public float     getX()          { return FIXED_X; }
     public float     getY()          { return y; }
@@ -194,6 +210,13 @@ public class Player {
     public MoveState getMoveState()  { return moveState; }
     public boolean   isIntroMoving() { return introMoving; }
 
+    public boolean justLanded() {
+        boolean l = landedThisFrame;
+        landedThisFrame = false;
+        return l;
+    }
+
+    // Hitboxes
     public float hitX()   { return FIXED_X - SIZE * 0.28f; }
     public float hitY()   { return y; }
     public float hitW()   { return SIZE * 0.56f; }
@@ -203,6 +226,8 @@ public class Player {
     public float stompY() { return y; }
     public float stompW() { return SIZE * 0.5f; }
     public float stompH() { return 10f; }
+
+    // ── Animation helpers ──────────────────────────────────────
 
     private TextureRegion currentFrame() {
         switch (animState) {

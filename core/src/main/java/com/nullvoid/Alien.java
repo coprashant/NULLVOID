@@ -32,18 +32,20 @@ public class Alien {
     private static Animation<TextureRegion> runAnim, runAnimL,
                                             idleAnim, deathAnim;
 
+    // ── Asset loading ──────────────────────────────────────────
+
     public static void loadAssets() {
         runTex   = new Texture("Alien_run.png");
         idleTex  = new Texture("Alien_idle.png");
         deathTex = new Texture("Alien_death.png");
 
-        runAnim  = buildAnim(runTex,   32, 32, 6, 0.10f,
-                             Animation.PlayMode.LOOP);
-        idleAnim = buildAnim(idleTex,  32, 32, 4, 0.15f,
-                             Animation.PlayMode.LOOP);
-        deathAnim= buildAnim(deathTex, 32, 32, 4, 0.12f,
-                             Animation.PlayMode.NORMAL);
-        runAnimL = buildAnimFlipped(runTex, 32, 32, 6, 0.10f);
+        runAnim   = buildAnim(runTex,   32, 32, 6, 0.10f,
+                              Animation.PlayMode.LOOP);
+        idleAnim  = buildAnim(idleTex,  32, 32, 4, 0.15f,
+                              Animation.PlayMode.LOOP);
+        deathAnim = buildAnim(deathTex, 32, 32, 4, 0.12f,
+                              Animation.PlayMode.NORMAL);
+        runAnimL  = buildAnimFlipped(runTex, 32, 32, 6, 0.10f);
     }
 
     public static void disposeAssets() {
@@ -51,6 +53,8 @@ public class Alien {
         if (idleTex  != null) idleTex.dispose();
         if (deathTex != null) deathTex.dispose();
     }
+
+    // ── Factories ──────────────────────────────────────────────
 
     public static Alien createWalker(float spawnX) {
         Alien a = new Alien();
@@ -71,6 +75,8 @@ public class Alien {
         a.patrolRight = centerX + range;
         return a;
     }
+
+    // ── Update ─────────────────────────────────────────────────
 
     public void update(float delta, float worldSpeed,
                        com.badlogic.gdx.utils.Array<Rock> rocks) {
@@ -96,15 +102,24 @@ public class Alien {
             }
         }
 
-        // Rock collision — only check when on ground
+        // Rock avoidance — only when on ground and cooldown expired
         if (onGround && jumpCooldown <= 0f) {
             for (Rock rock : rocks) {
-                if (isApproachingRock(rock)) {
+                if (isApproachingRock(rock, worldSpeed)) {
                     if (type == Type.WALKER) {
+                        // Walkers always jump over rocks
                         jump();
                     } else {
-                        velX = -velX;
-                        jumpCooldown = 1.0f;
+                        float rockCenterX = rock.hitX() + rock.hitW() * 0.5f;
+                        boolean rockInZone = rockCenterX >= patrolLeft
+                                          && rockCenterX <= patrolRight;
+                        if (rockInZone) {
+                            jump();
+                        } else {
+                            // Rock is outside patrol range — just flip away
+                            velX = -velX;
+                            jumpCooldown = 1.0f;
+                        }
                     }
                     break;
                 }
@@ -121,12 +136,16 @@ public class Alien {
         }
     }
 
+    // ── Combat ─────────────────────────────────────────────────
+
     public void die() {
         dead      = true;
         stateTime = 0f;
         velX      = 0f;
         velY      = 0f;
     }
+
+    // ── Render ─────────────────────────────────────────────────
 
     public void render(SpriteBatch batch) {
         Animation<TextureRegion> anim;
@@ -141,6 +160,8 @@ public class Alien {
         batch.draw(frame, x - SIZE / 2f, y, SIZE, SIZE);
     }
 
+    // ── Accessors ──────────────────────────────────────────────
+
     public float   getX()        { return x; }
     public float   getY()        { return y; }
     public boolean isDead()      { return dead; }
@@ -149,15 +170,19 @@ public class Alien {
         return dead && deathAnim.isAnimationFinished(stateTime);
     }
 
+    // Body hitbox
     public float hitX() { return x - SIZE * 0.3f;  }
     public float hitY() { return y + SIZE * 0.15f; }
     public float hitW() { return SIZE * 0.6f;       }
     public float hitH() { return SIZE * 0.6f;       }
 
+    // Stomp target — top of alien's head
     public float headX() { return x - SIZE * 0.25f; }
     public float headY() { return y + SIZE * 0.65f; }
     public float headW() { return SIZE * 0.5f;       }
     public float headH() { return SIZE * 0.2f;       }
+
+    // ── Private helpers ────────────────────────────────────────
 
     private void jump() {
         if (!onGround || jumpCooldown > 0f) return;
@@ -166,29 +191,28 @@ public class Alien {
         jumpCooldown = 1.2f;
     }
 
-private boolean isApproachingRock(Rock rock) {
-    // Must be at ground level
-    if (Math.abs(y - Player.GROUND_Y) > 4f) return false;
 
-    // Use the rock's actual hitbox left/right edges
-    float rockLeft  = rock.hitX();
-    float rockRight = rock.hitX() + rock.hitW();
+    private boolean isApproachingRock(Rock rock, float worldSpeed) {
+        if (Math.abs(y - Player.GROUND_Y) > 4f) return false;
 
-    // Detection zone ahead of alien
-    float lookDist = SIZE * 0.8f;
+        float rockLeft  = rock.hitX();
+        float rockRight = rock.hitX() + rock.hitW();
 
-    if (velX < 0) {
-        // Moving left — is rock's right edge just ahead to the left?
-        float frontX = x - SIZE * 0.3f;  // alien's left edge
-        return rockRight >= frontX - lookDist
-            && rockRight <= frontX + 4f;
-    } else {
-        // Moving right — is rock's left edge just ahead to the right?
-        float frontX = x + SIZE * 0.3f;  // alien's right edge
-        return rockLeft >= frontX - 4f
-            && rockLeft <= frontX + lookDist;
+        // Scale look-ahead so aliens react in time at high world speeds
+        float lookDist = SIZE * 0.8f + Math.abs(worldSpeed) * 0.15f;
+
+        if (velX < 0) {
+            float frontX = x - SIZE * 0.3f;
+            return rockRight >= frontX - lookDist
+                && rockRight <= frontX + 4f;
+        } else {
+            float frontX = x + SIZE * 0.3f;
+            return rockLeft >= frontX - 4f
+                && rockLeft <= frontX + lookDist;
+        }
     }
-}
+
+    // ── Animation builders ─────────────────────────────────────
 
     private static Animation<TextureRegion> buildAnim(
             Texture tex, int fw, int fh, int count,
