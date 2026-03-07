@@ -21,6 +21,9 @@ public class Player {
     private static final float GRAVITY    = -900f;
     private static final float JUMP_FORCE =  420f;
 
+    private static final float COYOTE_DURATION = 0.10f;
+    private float coyoteTimer = 0f;
+
     public static final int MAX_LIVES = 3;
     private int lives = MAX_LIVES;
 
@@ -29,7 +32,7 @@ public class Player {
     private boolean jumping         = false;
     private boolean dead            = false;
     private boolean facingLeft      = false;
-    private boolean landedThisFrame = false;   // ← new
+    private boolean landedThisFrame = false;
 
     private float invincibleTimer = 0f;
     private static final float INVINCIBLE_DURATION = 1.5f;
@@ -86,6 +89,7 @@ public class Player {
         introMoving     = true;
         introX          = INTRO_START_X;
         landedThisFrame = false;
+        coyoteTimer     = 0f;
     }
 
     // ── Intro ──────────────────────────────────────────────────
@@ -114,7 +118,7 @@ public class Player {
 
     public void update(float delta, InputHandler input) {
         stateTime       += delta;
-        landedThisFrame  = false;   // reset every frame before physics
+        landedThisFrame  = false;
         if (invincibleTimer > 0f) invincibleTimer -= delta;
         if (dead) return;
 
@@ -139,15 +143,22 @@ public class Player {
                         ? AnimState.IDLE : AnimState.RUN;
         }
 
-        // Jump
-        if (input.isJump() && !jumping) {
-            velY      = JUMP_FORCE;
-            jumping   = true;
-            animState = AnimState.JUMP;
-            stateTime = 0f;
+        if (y <= GROUND_Y && !jumping) {
+            coyoteTimer = COYOTE_DURATION;
+        } else if (coyoteTimer > 0f) {
+            coyoteTimer -= delta;
         }
 
-        // Gravity + landing detection
+        // Jump — allowed while grounded OR within the coyote window
+        if (input.isJump() && coyoteTimer > 0f) {
+            velY        = JUMP_FORCE;
+            jumping     = true;
+            coyoteTimer = 0f;   // consume window so it can't be used twice
+            animState   = AnimState.JUMP;
+            stateTime   = 0f;
+        }
+
+        // Gravity + landing
         if (jumping) {
             velY += GRAVITY * delta;
             y    += velY * delta;
@@ -155,7 +166,7 @@ public class Player {
                 y               = GROUND_Y;
                 velY            = 0f;
                 jumping         = false;
-                landedThisFrame = true;   // ← set on the frame we touch down
+                landedThisFrame = true;
                 animState       = (moveState == MoveState.IDLE)
                                   ? AnimState.IDLE : AnimState.RUN;
                 stateTime       = 0f;

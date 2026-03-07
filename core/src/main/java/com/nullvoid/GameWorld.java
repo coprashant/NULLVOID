@@ -11,18 +11,24 @@ public class GameWorld {
     private static final float INTRO_SPEED = 150f;
     private static final float INTRO_DIST  = 10f;
 
+    private static final float SPEED_LERP = 12f;
+
+    private static final float HIT_STUN_DURATION     = 0.4f;
+    private static final float HIT_STUN_SPEED_FACTOR = 0.25f;
+    private float hitStunTimer = 0f;
+
     private boolean introActive   = true;
     private float   introScrolled = 0f;
 
-    private float speed     = 0f;
-    private float scrollDir = 1f;
+    private float speed      = 0f;   // current (lerped) speed
+    private float targetSpeed = 0f;  // what speed is chasing
+    private float scrollDir  = 1f;
 
     private int     score     = 0;
     private int     highScore = 0;
     private float   distance  = 0f;
     private boolean gameOver  = false;
 
-    // Difficulty — driven by distance, not a per-frame decrement
     private float alienInterval = 5f;
     private float rockInterval  = 3.5f;
     private float ceilInterval  = 8f;
@@ -68,7 +74,9 @@ public class GameWorld {
         dust.clear();
 
         speed         = 0f;
+        targetSpeed   = 0f;
         scrollDir     = 1f;
+        hitStunTimer  = 0f;
         introActive   = true;
         introScrolled = 0f;
         score         = 0;
@@ -103,6 +111,7 @@ public class GameWorld {
                 if (introScrolled >= INTRO_DIST) {
                     introActive = false;
                     speed       = 0f;
+                    targetSpeed = 0f;
                 }
             } else {
                 background.update(delta, 0f);
@@ -115,24 +124,35 @@ public class GameWorld {
 
         Player.MoveState ms = player.getMoveState();
 
+        // Determine target speed from input
         switch (ms) {
-            case WALK_RIGHT: speed = WALK_SPEED; scrollDir =  1f; break;
-            case RUN_RIGHT:  speed = RUN_SPEED;  scrollDir =  1f; break;
-            case WALK_LEFT:  speed = WALK_SPEED; scrollDir = -1f; break;
-            case RUN_LEFT:   speed = RUN_SPEED;  scrollDir = -1f; break;
-            default:         speed = 0f;                          break;
+            case WALK_RIGHT: targetSpeed = WALK_SPEED; scrollDir =  1f; break;
+            case RUN_RIGHT:  targetSpeed = RUN_SPEED;  scrollDir =  1f; break;
+            case WALK_LEFT:  targetSpeed = WALK_SPEED; scrollDir = -1f; break;
+            case RUN_LEFT:   targetSpeed = RUN_SPEED;  scrollDir = -1f; break;
+            default:         targetSpeed = 0f;                          break;
         }
 
-        if (scrollDir > 0 && speed > 0)
-            distance += speed * delta * 0.04f;
+        // Lerp current speed toward target — smooth acceleration/deceleration
+        speed += (targetSpeed - speed) * Math.min(delta * SPEED_LERP, 1f);
+
+        // Hit stun — clamp effective speed while the stun window is active
+        float effectiveSpeed = speed;
+        if (hitStunTimer > 0f) {
+            hitStunTimer  -= delta;
+            effectiveSpeed = speed * HIT_STUN_SPEED_FACTOR;
+        }
+
+        if (scrollDir > 0 && effectiveSpeed > 0)
+            distance += effectiveSpeed * delta * 0.04f;
 
         // Distance-based difficulty scaling (0 → 1 over 500 m)
         float t = Math.min(distance / 500f, 1f);
-        alienInterval = 5f   - t * 2.5f;   // 5s → 2.5s
-        rockInterval  = 3.5f - t * 1.3f;   // 3.5s → 2.2s
-        ceilInterval  = 8f   - t * 3f;     // 8s → 5s
+        alienInterval = 5f   - t * 2.5f;
+        rockInterval  = 3.5f - t * 1.3f;
+        ceilInterval  = 8f   - t * 3f;
 
-        background.update(delta, speed * scrollDir);
+        background.update(delta, effectiveSpeed * scrollDir);
 
         spawnAliens(delta);
         spawnRocks(delta);
@@ -142,7 +162,6 @@ public class GameWorld {
         updateObjects(delta);
         checkCollisions();
 
-        // Landing dust
         if (player.justLanded())
             spawnDust(player.getX(), Player.GROUND_Y);
     }
@@ -179,9 +198,7 @@ public class GameWorld {
     public int     getDistance()  { return (int)distance; }
     public float   getSpeed()     { return speed; }
     public boolean isIntro()      { return introActive; }
-
-    
-    public void setHighScore(int hs) { highScore = hs; }
+    public void    setHighScore(int hs) { highScore = hs; }
 
     // ── Spawning ───────────────────────────────────────────────
 
@@ -221,7 +238,6 @@ public class GameWorld {
         if (gemTimer < gemInterval) return;
         gemTimer = 0f;
         float spawnX = NullVoid.W + 60f;
-        // Check a wider window so gems don't land inside incoming rocks
         for (Rock r : rocks) {
             if (Math.abs(r.getX() - spawnX) < 120f) return;
         }
@@ -280,7 +296,7 @@ public class GameWorld {
             if (r.getX() + Rock.SIZE < player.getX()) r.markPassed();
         }
 
-        // Ceiling gaps — no isJumping() gate; hitbox height handles selectivity
+        // Ceiling gaps — hitbox height handles selectivity, no isJumping() gate
         for (CeilingGap c : ceilings) {
             if (c.isPassed()) continue;
             if (overlaps(player.hitX(), player.hitY(),
@@ -339,7 +355,12 @@ public class GameWorld {
     private void triggerHit() {
         boolean died = player.hit();
         spawnDust(player.getX(), player.getY() + Player.SIZE);
-        if (died) triggerGameOver();
+        if (died) {
+            triggerGameOver();
+        } else {
+            // Activate hit stun — world slows briefly so player isn't chain-hit
+            hitStunTimer = HIT_STUN_DURATION;
+        }
     }
 
     private void triggerGameOver() {
