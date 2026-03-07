@@ -31,4 +31,9 @@ public class InputHandler {
             || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)
             || Gdx.input.justTouched();
     }
+
+    public boolean isPause() {
+        return Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)
+            || Gdx.input.isKeyJustPressed(Input.Keys.P);
+    }
 }

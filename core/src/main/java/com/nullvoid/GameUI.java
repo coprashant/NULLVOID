@@ -12,49 +12,55 @@ import com.badlogic.gdx.math.MathUtils;
 
 public class GameUI {
 
-    private static final float W = NullVoid.W; 
-    private static final float H = NullVoid.H; 
+    private static final float W = NullVoid.W;
+    private static final float H = NullVoid.H;
 
     private static final Color COL_CYAN   = new Color(0.20f, 1.00f, 0.85f, 1f);
     private static final Color COL_PURPLE = new Color(0.65f, 0.20f, 1.00f, 1f);
     private static final Color COL_GOLD   = new Color(1.00f, 0.85f, 0.20f, 1f);
     private static final Color COL_DIM    = new Color(0.40f, 0.40f, 0.55f, 1f);
+    private static final Color COL_RED    = new Color(1.00f, 0.18f, 0.28f, 1f);
 
     private static final int STAR_COUNT = 100;
-    private final float[] starX = new float[STAR_COUNT];
-    private final float[] starY = new float[STAR_COUNT];
-    private final float[] starSize = new float[STAR_COUNT];
-    private final float[] starSpd = new float[STAR_COUNT];
+    private final float[] starX     = new float[STAR_COUNT];
+    private final float[] starY     = new float[STAR_COUNT];
+    private final float[] starSize  = new float[STAR_COUNT];
+    private final float[] starSpd   = new float[STAR_COUNT];
     private final float[] starAlpha = new float[STAR_COUNT];
 
-    private float time = 0f;
-    private float blinkTimer = 0f;
-    private boolean blinkOn = true;
-    
-    private float scanPos = 0f;
-    private float glitchX = 0f;
+    private float   time       = 0f;
+    private float   blinkTimer = 0f;
+    private boolean blinkOn    = true;
+
+    private float scanPos     = 0f;
+    private float glitchX     = 0f;
     private float glitchAlpha = 0.85f;
 
-    private final SpriteBatch batch;
-    private BitmapFont fontSm, fontMd, fontLg;
-    private final GlyphLayout layout = new GlyphLayout();
-    private ShapeRenderer shapes;
+    // FIX 3: exposed so NullVoid can reset it on each new game start
+    float hudHintTimer = 3.5f;
 
-    private Texture lifeSheet;
+    private final SpriteBatch batch;
+    private BitmapFont        fontSm, fontMd, fontLg;
+    private final GlyphLayout layout = new GlyphLayout();
+    private ShapeRenderer     shapes;
+
+    private Texture       lifeSheet;
     private TextureRegion lifeIcon;
-    private Texture gemTex;
+    private Texture       gemTex;
 
     public GameUI(SpriteBatch batch) { this.batch = batch; }
+
+    // ── Lifecycle ──────────────────────────────────────────────
 
     public void create() {
         fontSm = new BitmapFont(); fontSm.getData().setScale(0.72f);
         fontMd = new BitmapFont(); fontMd.getData().setScale(0.95f);
         fontLg = new BitmapFont(); fontLg.getData().setScale(1.70f);
 
-        shapes = new ShapeRenderer();
+        shapes    = new ShapeRenderer();
         lifeSheet = new Texture("SmallAstronaut_Idle.png");
-        lifeIcon = new TextureRegion(lifeSheet, 0, 0, 16, 16);
-        gemTex = new Texture("Diamond.png");
+        lifeIcon  = new TextureRegion(lifeSheet, 0, 0, 16, 16);
+        gemTex    = new Texture("Diamond.png");
 
         initStars();
     }
@@ -65,34 +71,37 @@ public class GameUI {
             starY[i] = MathUtils.random(0f, H);
             float layer = MathUtils.random();
             if (layer < 0.55f) {
-                starSize[i] = MathUtils.random(0.4f, 0.8f);
-                starSpd[i] = MathUtils.random(3f, 7f);
+                starSize[i]  = MathUtils.random(0.4f, 0.8f);
+                starSpd[i]   = MathUtils.random(3f, 7f);
                 starAlpha[i] = MathUtils.random(0.25f, 0.5f);
             } else if (layer < 0.85f) {
-                starSize[i] = MathUtils.random(0.8f, 1.4f);
-                starSpd[i] = MathUtils.random(9f, 16f);
+                starSize[i]  = MathUtils.random(0.8f, 1.4f);
+                starSpd[i]   = MathUtils.random(9f, 16f);
                 starAlpha[i] = MathUtils.random(0.45f, 0.7f);
             } else {
-                starSize[i] = MathUtils.random(1.4f, 2.0f);
-                starSpd[i] = MathUtils.random(18f, 30f);
+                starSize[i]  = MathUtils.random(1.4f, 2.0f);
+                starSpd[i]   = MathUtils.random(18f, 30f);
                 starAlpha[i] = MathUtils.random(0.65f, 1.0f);
             }
         }
     }
+
+    // ── Update ─────────────────────────────────────────────────
 
     private void update(float delta) {
         time += delta;
         blinkTimer += delta;
         if (blinkTimer >= 0.55f) { blinkTimer = 0f; blinkOn = !blinkOn; }
 
+        // FIX 1: scanPos advances freely; drawMenuChrome does the mod
+        // internally so it works for any box size passed to it.
         scanPos += delta * 450f;
-        if (scanPos > (340f + 125f) * 2f) scanPos = 0;
 
         if (MathUtils.random() > 0.98f) {
-            glitchX = MathUtils.random(-3f, 3f);
+            glitchX     = MathUtils.random(-3f, 3f);
             glitchAlpha = 0.3f;
         } else {
-            glitchX = MathUtils.lerp(glitchX, 0, 0.2f);
+            glitchX     = MathUtils.lerp(glitchX, 0, 0.2f);
             glitchAlpha = MathUtils.lerp(glitchAlpha, 0.85f, 0.1f);
         }
 
@@ -100,28 +109,36 @@ public class GameUI {
             starX[i] += starSpd[i] * delta;
             if (starX[i] > W + 2f) starX[i] = -2f;
             starAlpha[i] += MathUtils.sin(time * 1.8f + i) * delta * 0.2f;
-            starAlpha[i] = MathUtils.clamp(starAlpha[i], 0.08f, 1.0f);
+            starAlpha[i]  = MathUtils.clamp(starAlpha[i], 0.08f, 1.0f);
         }
     }
 
-    public void render(NullVoid.State state, GameWorld world, OrthographicCamera cam) {
+    // ── Public render ──────────────────────────────────────────
+
+    public void render(NullVoid.State state, GameWorld world,
+                       OrthographicCamera cam) {
+        // FIX 2: shapes projection must be set before ANY state uses shapes
         shapes.setProjectionMatrix(cam.combined);
         batch.setProjectionMatrix(cam.combined);
         update(com.badlogic.gdx.Gdx.graphics.getDeltaTime());
 
         switch (state) {
-            case MENU: drawMenu(world); break;
-            case PLAYING: drawHUD(world); break;
+            case MENU:      drawMenu(world);     break;
+            case PLAYING:   drawHUD(world);      break;
+            case PAUSED:    drawPaused(world);   break;
             case GAME_OVER: drawGameOver(world); break;
         }
     }
+
+    // ══════════════════════════════════════════════════════════
+    //  MENU
+    // ══════════════════════════════════════════════════════════
 
     private void drawMenu(GameWorld world) {
         drawSpaceBackground();
         drawStarfield();
         drawScanlines();
-        drawMenuChrome();
-
+        drawMenuChrome(340f, 125f, 85f);
         batch.begin();
         drawMenuText(world);
         batch.end();
@@ -129,8 +146,7 @@ public class GameUI {
 
     private void drawSpaceBackground() {
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        
-        // Gradient Background
+
         float stripH = H / 24f;
         for (int i = 0; i < 24; i++) {
             float t = (float) i / 24f;
@@ -141,24 +157,22 @@ public class GameUI {
             shapes.rect(0, H - (i + 1) * stripH, W, stripH + 1f);
         }
 
-        // Purple Nebula (Top Right)
+        // Purple nebula top-right
         for (int r = 7; r >= 0; r--) {
-            float a = (r == 0) ? 0.06f : 0.014f * (8 - r);
-            float rw = 55f + r * 9f;
-            float rh = 35f + r * 6f;
+            float a  = (r == 0) ? 0.06f : 0.014f * (8 - r);
+            float rw = 55f + r * 9f, rh = 35f + r * 6f;
             shapes.setColor(0.35f, 0.05f, 0.65f, a);
             shapes.ellipse(W - rw * 0.6f, H - rh * 0.5f, rw, rh);
         }
 
-        // Cyan Nebula (Bottom Left)
+        // Cyan nebula bottom-left
         for (int r = 5; r >= 0; r--) {
-            float a = 0.02f * (6 - r);
-            float rw = 45f + r * 8f;
-            float rh = 28f + r * 5f;
+            float a  = 0.02f * (6 - r);
+            float rw = 45f + r * 8f, rh = 28f + r * 5f;
             shapes.setColor(0.0f, 0.45f, 0.55f, a);
             shapes.ellipse(10f, 45f - rh * 0.4f, rw, rh);
         }
-        
+
         shapes.end();
     }
 
@@ -166,7 +180,8 @@ public class GameUI {
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         for (int i = 0; i < STAR_COUNT; i++) {
             float tint = (i % 6 == 0) ? 0.85f : 1.0f;
-            shapes.setColor(tint, tint, 1.0f, MathUtils.clamp(starAlpha[i], 0f, 1f));
+            shapes.setColor(tint, tint, 1.0f,
+                            MathUtils.clamp(starAlpha[i], 0f, 1f));
             shapes.rect(starX[i], starY[i], starSize[i], starSize[i]);
         }
         shapes.end();
@@ -179,34 +194,42 @@ public class GameUI {
         shapes.end();
     }
 
-    private void drawMenuChrome() {
+    /**
+     * Reusable chrome box — used by menu, pause, and game over.
+     * FIX 1: scanPos mod uses the perimeter of THIS box (bw/bh),
+     * not the hardcoded menu-box size, so it works for all three screens.
+     */
+    private void drawMenuChrome(float bw, float bh, float by) {
         shapes.begin(ShapeRenderer.ShapeType.Filled);
 
-        float bw = 340f, bh = 125f;
-        float bx = (W - bw) / 2f + glitchX;
-        float by = 85f;
+        float bx        = (W - bw) / 2f + glitchX;
+        float perimeter = (bw + bh) * 2f;
+        float scan      = scanPos % perimeter;   // ← correct mod for this box
 
+        // Fill
         shapes.setColor(0.01f, 0.03f, 0.08f, glitchAlpha);
         shapes.rect(bx, by, bw, bh);
 
+        // Border
         shapes.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.2f);
-        shapes.rect(bx, by, bw, 1f);
-        shapes.rect(bx, by + bh, bw, 1f);
-        shapes.rect(bx, by, 1f, bh);
-        shapes.rect(bx + bw, by, 1f, bh);
+        shapes.rect(bx,      by,      bw, 1f);
+        shapes.rect(bx,      by + bh, bw, 1f);
+        shapes.rect(bx,      by,      1f, bh);
+        shapes.rect(bx + bw, by,      1f, bh);
 
+        // Scanning perimeter light
         shapes.setColor(Color.WHITE);
-        float sLen = 40f; 
-        if (scanPos < bw) {
-            shapes.rect(bx + scanPos, by, Math.min(sLen, bw - scanPos), 1.2f);
-        } else if (scanPos < bw + bh) {
-            float rel = scanPos - bw;
+        float sLen = 40f;
+        if (scan < bw) {
+            shapes.rect(bx + scan, by, Math.min(sLen, bw - scan), 1.2f);
+        } else if (scan < bw + bh) {
+            float rel = scan - bw;
             shapes.rect(bx + bw, by + rel, 1.2f, Math.min(sLen, bh - rel));
-        } else if (scanPos < bw * 2 + bh) {
-            float rel = scanPos - (bw + bh);
+        } else if (scan < bw * 2f + bh) {
+            float rel = scan - (bw + bh);
             shapes.rect(bx + bw - rel - sLen, by + bh, sLen, 1.2f);
         } else {
-            float rel = scanPos - (bw * 2 + bh);
+            float rel = scan - (bw * 2f + bh);
             shapes.rect(bx, by + bh - rel - sLen, 1.2f, sLen);
         }
 
@@ -215,44 +238,39 @@ public class GameUI {
 
     private void drawMenuText(GameWorld world) {
         float titleY = 245f + MathUtils.sin(time * 2f) * 2f;
-        float glow = 0.38f + 0.32f * MathUtils.sin(time * 2.8f);
-        
+        float glow   = 0.38f + 0.32f * MathUtils.sin(time * 2.8f);
+
         fontLg.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, glow * 0.4f);
         drawCentered(fontLg, "NULLVOID", titleY + 1);
         fontLg.setColor(1f, 1f, 1f, 1f);
         drawCentered(fontLg, "NULLVOID", titleY);
 
         fontSm.setColor(COL_DIM.r, COL_DIM.g, COL_DIM.b, 0.8f);
-        drawCentered(fontSm, "— SPACE RUNNER —", 222f);
+        drawCentered(fontSm, "- SPACE RUNNER -", 222f);
 
-        float bx = W / 2f + glitchX;
+        float bx      = W / 2f + glitchX;
         float flicker = 0.72f + 0.28f * MathUtils.sin(time * 6f);
         fontSm.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, flicker);
         drawCenteredAt(fontSm, "[ MISSION BRIEFING ]", bx, 198f);
 
-        float leftX = bx - 20f;
-        float rightX = bx + 20f;
-        float ctrlY = 180f;
-
+        float leftX = bx - 20f, rightX = bx + 20f, ctrlY = 180f;
         fontSm.setColor(0.55f, 0.88f, 1.00f, 0.92f);
         drawRightAligned(fontSm, "A / D  or  LEFT / RIGHT", leftX, ctrlY);
-        fontSm.draw(batch, "Move", rightX, ctrlY);
-        
-        drawRightAligned(fontSm, "W  or  UP  or  SPACE", leftX, ctrlY - 14f);
-        fontSm.draw(batch, "Jump", rightX, ctrlY - 14f);
-        
-        drawRightAligned(fontSm, "SHIFT + move", leftX, ctrlY - 28f);
+        fontSm.draw(batch, "Move",   rightX, ctrlY);
+        drawRightAligned(fontSm, "W  or  UP  or  SPACE",   leftX, ctrlY - 14f);
+        fontSm.draw(batch, "Jump",   rightX, ctrlY - 14f);
+        drawRightAligned(fontSm, "SHIFT + move",            leftX, ctrlY - 28f);
         fontSm.draw(batch, "Sprint", rightX, ctrlY - 28f);
 
         fontSm.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, 0.92f);
-        drawCenteredAt(fontSm, "Stomp aliens  +10 pts", bx, 130f);
+        drawCenteredAt(fontSm, "Stomp aliens  +10 pts",            bx, 130f);
         fontSm.setColor(0.78f, 0.48f, 1.00f, 0.92f);
-        drawCenteredAt(fontSm, "Collect diamonds  +5 pts", bx, 117f);
+        drawCenteredAt(fontSm, "Collect diamonds  +5 pts",         bx, 117f);
         fontSm.setColor(0.95f, 0.32f, 0.32f, 0.92f);
         drawCenteredAt(fontSm, "3 lives  -  don't lose them all!", bx, 104f);
 
         fontSm.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.6f);
-        drawCentered(fontSm, "BEST DISTANCE: " + world.getHighScore() + "m", 65f);
+        drawCentered(fontSm, "BEST: " + world.getHighScore() + " m", 65f);
 
         if (blinkOn) {
             fontMd.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, 1f);
@@ -260,41 +278,136 @@ public class GameUI {
         }
     }
 
+    // ══════════════════════════════════════════════════════════
+    //  HUD
+    // ══════════════════════════════════════════════════════════
+
     private void drawHUD(GameWorld world) {
+        if (hudHintTimer > 0f)
+            hudHintTimer -= com.badlogic.gdx.Gdx.graphics.getDeltaTime();
+
+        // FIX 2: shapes projection already set in render() — safe to use here
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.18f);
+        shapes.rect(0, H - 18f, W, 1f);
+        shapes.end();
+
         batch.begin();
-        float iconSize = 18f;
+
+        // Lives
+        float iconSize = 16f;
+        float iconY    = H - iconSize - 5f;
         for (int i = 0; i < world.getLives(); i++) {
-            batch.draw(lifeIcon, 8f + i * (iconSize + 4f), H - iconSize - 4f, iconSize, iconSize);
+            batch.setColor(1f, 1f, 1f, 1f);
+            batch.draw(lifeIcon, 7f + i * (iconSize + 3f), iconY, iconSize, iconSize);
         }
-        fontMd.setColor(Color.WHITE);
-        String scoreStr = "SCORE " + world.getScore();
-        layout.setText(fontMd, scoreStr);
-        fontMd.draw(batch, scoreStr, W - layout.width - 8f, H - 4f);
-        fontMd.setColor(0.6f, 0.9f, 1f, 1f);
+        // Greyed-out lost lives
+        batch.setColor(0.35f, 0.35f, 0.45f, 0.5f);
+        for (int i = world.getLives(); i < Player.MAX_LIVES; i++) {
+            batch.draw(lifeIcon, 7f + i * (iconSize + 3f), iconY, iconSize, iconSize);
+        }
+        batch.setColor(1f, 1f, 1f, 1f);
+
+        // Distance (top center)
+        fontMd.setColor(0.55f, 0.92f, 1f, 1f);
         String distStr = world.getDistance() + " m";
         layout.setText(fontMd, distStr);
         fontMd.draw(batch, distStr, (W - layout.width) / 2f, H - 4f);
+
+        // Score (top right)
+        fontMd.setColor(Color.WHITE);
+        String scoreStr = "SCORE " + world.getScore();
+        layout.setText(fontMd, scoreStr);
+        fontMd.draw(batch, scoreStr, W - layout.width - 7f, H - 4f);
+
+        // Pause hint — fades after hudHintTimer expires
+        if (hudHintTimer > 0f) {
+            float alpha = MathUtils.clamp(hudHintTimer / 1.5f, 0f, 0.55f);
+            fontSm.setColor(0.5f, 0.5f, 0.6f, alpha);
+            String hint = "ESC / P  pause";
+            layout.setText(fontSm, hint);
+            fontSm.draw(batch, hint, W - layout.width - 6f, 10f);
+        }
+
         batch.end();
     }
 
-    private void drawGameOver(GameWorld world) {
-        drawStarfield();
-        drawScanlines();
-        drawOverlay(0.80f);
+    // ══════════════════════════════════════════════════════════
+    //  PAUSE
+    // ══════════════════════════════════════════════════════════
+
+    private void drawPaused(GameWorld world) {
+        drawOverlay(0.60f);
+
+        float bw = 220f, bh = 130f;
+        float by = (H - bh) / 2f;
+        drawMenuChrome(bw, bh, by);
+
         batch.begin();
-        fontLg.setColor(1f, 0.18f, 0.28f, 1f);
-        drawCentered(fontLg, "GAME OVER", 210f);
-        fontMd.setColor(Color.WHITE);
-        drawCentered(fontMd, "Score      " + world.getScore(), 170f);
-        drawCentered(fontMd, "Distance   " + world.getDistance() + " m", 152f);
+        float bx     = W / 2f + glitchX;
+        float titleY = by + bh - 15f;
+
         fontMd.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 1f);
-        drawCentered(fontMd, "Best       " + world.getHighScore(), 134f);
+        drawCenteredAt(fontMd, ":: SYSTEM PAUSED ::", bx, titleY);
+
+        fontSm.setColor(COL_DIM.r, COL_DIM.g, COL_DIM.b, 0.8f);
+        drawCenteredAt(fontSm, "-------------------", bx, titleY - 12f);
+
+        fontSm.setColor(Color.WHITE);
+        drawCenteredAt(fontSm, "CURRENT SCORE: " + world.getScore(),      bx, titleY - 35f);
+        drawCenteredAt(fontSm, "DISTANCE: " + world.getDistance() + "m",  bx, titleY - 50f);
+
+        fontSm.setColor(COL_PURPLE.r, COL_PURPLE.g, COL_PURPLE.b, 0.9f);
+        drawCenteredAt(fontSm, "LIVES: " + world.getLives() + " / " + Player.MAX_LIVES,
+                       bx, titleY - 70f);
+
         if (blinkOn) {
-            fontMd.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, 1f);
-            drawCentered(fontMd, "PRESS SPACE TO RETURN", 35f);
+            fontSm.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, 1f);
+            drawCenteredAt(fontSm, "[ PRESS SPACE TO RESUME ]", bx, by + 15f);
         }
+
         batch.end();
     }
+
+    // ══════════════════════════════════════════════════════════
+    //  GAME OVER
+    // ══════════════════════════════════════════════════════════
+
+    private void drawGameOver(GameWorld world) {
+        drawSpaceBackground();
+        drawStarfield();
+        drawScanlines();
+        drawOverlay(0.45f);
+
+        float bw = 300f, bh = 160f, by = 75f;
+        drawMenuChrome(bw, bh, by);
+
+        batch.begin();
+        float bx      = W / 2f + glitchX;
+        float flicker = 0.8f + 0.2f * MathUtils.sin(time * 10f);
+
+        fontLg.setColor(COL_RED.r, COL_RED.g, COL_RED.b, flicker);
+        drawCenteredAt(fontLg, "GAME OVER!!", bx, by + bh - 20f);
+
+        fontSm.setColor(COL_DIM.r, COL_DIM.g, COL_DIM.b, 0.8f);
+        drawCenteredAt(fontSm, "!! ALL LIVES ENDED !!", bx, by + bh - 45f);
+
+        fontMd.setColor(Color.WHITE);
+        drawCenteredAt(fontMd, "FINAL SCORE: " + world.getScore(),       bx, by + 75f);
+        drawCenteredAt(fontMd, "DISTANCE: " + world.getDistance() + "m", bx, by + 60f);
+
+        fontMd.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 1f);
+        drawCenteredAt(fontMd, "PERSONAL BEST: " + world.getHighScore(), bx, by + 40f);
+
+        if (blinkOn) {
+            fontMd.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, 1f);
+            drawCenteredAt(fontMd, "PRESS SPACE TO RESTART", bx, 40f);
+        }
+
+        batch.end();
+    }
+
+    // ── Helpers ────────────────────────────────────────────────
 
     private void drawOverlay(float alpha) {
         shapes.begin(ShapeRenderer.ShapeType.Filled);
@@ -310,7 +423,7 @@ public class GameUI {
 
     private void drawCenteredAt(BitmapFont f, String text, float x, float y) {
         layout.setText(f, text);
-        f.draw(batch, text, x - (layout.width / 2f), y);
+        f.draw(batch, text, x - layout.width / 2f, y);
     }
 
     private void drawRightAligned(BitmapFont f, String text, float x, float y) {
@@ -319,7 +432,11 @@ public class GameUI {
     }
 
     public void dispose() {
-        fontSm.dispose(); fontMd.dispose(); fontLg.dispose();
-        shapes.dispose(); lifeSheet.dispose(); gemTex.dispose();
+        fontSm.dispose();
+        fontMd.dispose();
+        fontLg.dispose();
+        shapes.dispose();
+        lifeSheet.dispose();
+        gemTex.dispose();
     }
 }

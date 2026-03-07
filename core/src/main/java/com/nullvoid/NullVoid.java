@@ -17,11 +17,11 @@ public class NullVoid extends ApplicationAdapter {
     private static final String PREFS_NAME     = "nullvoid.prefs";
     private static final String KEY_HIGH_SCORE = "highScore";
 
-    public enum State { MENU, PLAYING, GAME_OVER }
+    public enum State { MENU, PLAYING, PAUSED, GAME_OVER }
     public State state = State.MENU;
 
     public OrthographicCamera camera;
-    public Viewport            viewport;   // ← FitViewport keeps aspect ratio
+    public Viewport            viewport;
     public SpriteBatch         batch;
 
     public GameWorld    world;
@@ -59,6 +59,7 @@ public class NullVoid extends ApplicationAdapter {
 
         handleInput();
 
+        // Only tick the world when actively playing
         if (state == State.PLAYING) {
             world.update(delta, input);
             if (world.isGameOver()) {
@@ -67,11 +68,9 @@ public class NullVoid extends ApplicationAdapter {
             }
         }
 
-        // Clear with letterbox colour (black bars when aspect doesn't match)
         Gdx.gl.glClearColor(0f, 0f, 0f, 1f);
         Gdx.gl.glClear(GL20.GL_COLOR_BUFFER_BIT);
 
-        // Apply viewport — sets the GL scissor/viewport to the fit area
         viewport.apply();
         camera.update();
         batch.setProjectionMatrix(camera.combined);
@@ -82,7 +81,6 @@ public class NullVoid extends ApplicationAdapter {
 
     @Override
     public void resize(int width, int height) {
-        // Called whenever the window is resized — update viewport to refit
         viewport.update(width, height, true);
     }
 
@@ -93,7 +91,7 @@ public class NullVoid extends ApplicationAdapter {
         ui.dispose();
     }
 
-    // ── Input handling ─────────────────────────────────────────
+    // ── Input ──────────────────────────────────────────────────
 
     private void handleInput() {
         switch (state) {
@@ -102,13 +100,23 @@ public class NullVoid extends ApplicationAdapter {
                     int savedBest = prefs.getInteger(KEY_HIGH_SCORE, 0);
                     world.reset();
                     world.setHighScore(savedBest);
+                    ui.hudHintTimer = 3.5f;   // reset pause hint for new run
                     state = State.PLAYING;
                 }
                 break;
+
+            case PLAYING:
+                // ESC / P pauses mid-game
+                if (input.isPause()) state = State.PAUSED;
+                break;
+
+            case PAUSED:
+                // ESC / P or SPACE resumes
+                if (input.isPause() || input.isStart()) state = State.PLAYING;
+                break;
+
             case GAME_OVER:
                 if (input.isStart()) state = State.MENU;
-                break;
-            default:
                 break;
         }
     }
