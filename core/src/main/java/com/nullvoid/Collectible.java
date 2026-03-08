@@ -2,13 +2,19 @@ package com.nullvoid;
 
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.utils.Array;
 
-/**
- * Collectible — floating diamond. Collect for bonus points.
- */
 public class Collectible {
 
-    public static final float SIZE = 25f;   
+    public static final float SIZE = 25f;
+
+    // Natural height — mid-player so it looks right to collect
+    public static final float GEM_Y_GROUND = Player.GROUND_Y + Player.SIZE * 0.45f;
+    // Raised height when a rock is underneath
+    public static final float GEM_Y_ROCK   = Player.GROUND_Y + Rock.SIZE + 10f;
+    // How close a rock must be (horizontally) to push the gem up
+    public static final float ROCK_RADIUS  = 28f;
+
     private static Texture texture;
 
     private float   x, y;
@@ -25,14 +31,24 @@ public class Collectible {
 
     public Collectible(float x) {
         this.x = x;
-        this.y = Player.GROUND_Y + Player.SIZE * 0.5f;
+        this.y = GEM_Y_GROUND;
     }
 
-    public void update(float delta, float speed) {
+    // Called every frame — recalculates Y so gems always clear rocks
+    public void update(float delta, float speed, Array<Rock> rocks) {
         x       -= speed * delta;
         bobTime += delta;
-        y = Player.GROUND_Y + Player.SIZE * 0.5f
-            + (float)(Math.sin(bobTime * 4f) * 5f);
+
+        // Check if any rock is directly beneath this gem right now
+        float baseY = GEM_Y_GROUND;
+        for (Rock r : rocks) {
+            if (Math.abs(r.getX() - x) < ROCK_RADIUS) {
+                baseY = GEM_Y_ROCK;
+                break;
+            }
+        }
+
+        y = baseY + (float)(Math.sin(bobTime * 4f) * 5f);
     }
 
     public void render(SpriteBatch batch) {

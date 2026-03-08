@@ -38,6 +38,11 @@ public class GameWorld {
     private float gemTimer      = 0f;
     private float gemInterval   = 3f;
 
+    // Minimum gap in seconds enforced between any two obstacle spawns
+    private static final float SPAWN_SEPARATION = 1.8f;
+    private float lastSpawnTime = 0f;
+    private float gameTime      = 0f;
+
     private Player             player;
     private Background         background;
     private Array<Alien>       aliens    = new Array<>();
@@ -45,18 +50,18 @@ public class GameWorld {
     private Array<CeilingGap>  ceilings  = new Array<>();
     private Array<Collectible> gems      = new Array<>();
     private Array<DustEffect>  dust      = new Array<>();
-    private Array<SparkleEffect> sparkles = new Array<>();  // ← gem collect fx
+    private Array<SparkleEffect> sparkles = new Array<>();
 
     private Random rng = new Random();
 
-    // ── Lifecycle ──────────────────────────────────────────────
+    // Lifecycle
 
     public void create() {
         Alien.loadAssets();
         Rock.loadAssets();
         Collectible.loadAssets();
         DustEffect.loadAssets();
-        SparkleEffect.loadAssets();                         // ← load sparkle
+        SparkleEffect.loadAssets();
 
         player     = new Player();
         background = new Background();
@@ -74,7 +79,7 @@ public class GameWorld {
         ceilings.clear();
         gems.clear();
         dust.clear();
-        sparkles.clear();                                   // ← clear sparkles
+        sparkles.clear();
 
         speed         = 0f;
         targetSpeed   = 0f;
@@ -92,14 +97,18 @@ public class GameWorld {
         alienInterval = 5f;
         rockInterval  = 3.5f;
         ceilInterval  = 8f;
+        gameTime      = 0f;
+        lastSpawnTime = 0f;
     }
 
-    // ── Update ─────────────────────────────────────────────────
+    // Update
 
     public void update(float delta, InputHandler input) {
         if (gameOver) return;
 
-        // ── Intro sequence ─────────────────────────────────────
+        gameTime += delta;
+
+        // Intro sequence
         if (introActive) {
             boolean slideComplete = player.updateIntro(delta);
 
@@ -122,7 +131,7 @@ public class GameWorld {
             return;
         }
 
-        // ── Normal gameplay ────────────────────────────────────
+        // Normal gameplay
         player.update(delta, input);
 
         Player.MoveState ms = player.getMoveState();
@@ -165,17 +174,17 @@ public class GameWorld {
             spawnDust(player.getX(), Player.GROUND_Y);
     }
 
-    // ── Render ─────────────────────────────────────────────────
+    // Render
 
     public void render(SpriteBatch batch) {
         batch.begin();
         background.render(batch);
-        for (Collectible  g : gems)     g.render(batch);
-        for (Rock         r : rocks)    r.render(batch);
-        for (CeilingGap   c : ceilings) c.render(batch);
-        for (Alien        a : aliens)   a.render(batch);
-        for (DustEffect   d : dust)     d.render(batch);
-        for (SparkleEffect s : sparkles) s.render(batch); 
+        for (Collectible  g : gems)      g.render(batch);
+        for (Rock         r : rocks)     r.render(batch);
+        for (CeilingGap   c : ceilings)  c.render(batch);
+        for (Alien        a : aliens)    a.render(batch);
+        for (DustEffect   d : dust)      d.render(batch);
+        for (SparkleEffect s : sparkles) s.render(batch);
         player.render(batch);
         batch.end();
     }
@@ -187,10 +196,10 @@ public class GameWorld {
         Rock.disposeAssets();
         Collectible.disposeAssets();
         DustEffect.disposeAssets();
-        SparkleEffect.disposeAssets();                    
+        SparkleEffect.disposeAssets();
     }
 
-    // ── Accessors ──────────────────────────────────────────────
+    // Accessors
 
     public boolean isGameOver()         { return gameOver;  }
     public int     getScore()           { return score;     }
@@ -201,13 +210,24 @@ public class GameWorld {
     public boolean isIntro()            { return introActive; }
     public void    setHighScore(int hs) { highScore = hs; }
 
-    // ── Spawning ───────────────────────────────────────────────
+    // Spawning
+
+    private boolean canSpawnObstacle() {
+        return (gameTime - lastSpawnTime) >= SPAWN_SEPARATION;
+    }
+
+    private void markSpawned() {
+        lastSpawnTime = gameTime;
+    }
 
     private void spawnAliens(float delta) {
         if (scrollDir < 0 || speed < 10f) return;
         alienTimer += delta;
         if (alienTimer < alienInterval) return;
         alienTimer = 0f;
+        if (!canSpawnObstacle()) return;
+        markSpawned();
+
         if (rng.nextBoolean()) {
             aliens.add(Alien.createWalker(NullVoid.W + 60f));
         } else {
@@ -220,6 +240,9 @@ public class GameWorld {
         rockTimer += delta;
         if (rockTimer < rockInterval) return;
         rockTimer = 0f;
+        if (!canSpawnObstacle()) return;
+        markSpawned();
+
         rocks.add(new Rock(NullVoid.W + 60f));
         if (rng.nextFloat() < 0.25f)
             rocks.add(new Rock(NullVoid.W + 180f));
@@ -230,6 +253,9 @@ public class GameWorld {
         ceilTimer += delta;
         if (ceilTimer < ceilInterval) return;
         ceilTimer = 0f;
+        if (!canSpawnObstacle()) return;
+        markSpawned();
+
         ceilings.add(new CeilingGap(NullVoid.W + 60f));
     }
 
@@ -238,16 +264,21 @@ public class GameWorld {
         gemTimer += delta;
         if (gemTimer < gemInterval) return;
         gemTimer = 0f;
+
         float spawnX = NullVoid.W + 60f;
-        for (Rock r : rocks) {
-            if (Math.abs(r.getX() - spawnX) < 120f) return;
+
+        // Don't spawn gems near any live alien
+        for (Alien a : aliens) {
+            if (!a.isDead() && Math.abs(a.getX() - spawnX) < 120f) return;
         }
+
+        // Gems start at ground height — update() will raise them if a rock arrives
         int count = rng.nextInt(3) + 1;
         for (int i = 0; i < count; i++)
             gems.add(new Collectible(spawnX + i * 40f));
     }
 
-    // ── Object updates ─────────────────────────────────────────
+    // Object updates
 
     private void updateObjects(float delta) {
         float worldVel = speed * scrollDir;
@@ -268,9 +299,10 @@ public class GameWorld {
             c.update(delta, worldVel);
             if (c.isOffScreen()) ceilings.removeIndex(i);
         }
+        // Rocks must be updated before gems so positions are current this frame
         for (int i = gems.size - 1; i >= 0; i--) {
             Collectible g = gems.get(i);
-            g.update(delta, worldVel);
+            g.update(delta, worldVel, rocks);
             if (g.isOffScreen() || g.isCollected())
                 gems.removeIndex(i);
         }
@@ -279,17 +311,16 @@ public class GameWorld {
             d.update(delta);
             if (!d.isActive()) dust.removeIndex(i);
         }
-        for (int i = sparkles.size - 1; i >= 0; i--) {   // ← update sparkles
+        for (int i = sparkles.size - 1; i >= 0; i--) {
             SparkleEffect s = sparkles.get(i);
             s.update(delta);
             if (!s.isActive()) sparkles.removeIndex(i);
         }
     }
 
-    // ── Collision ──────────────────────────────────────────────
+    // Collision
 
     private void checkCollisions() {
-        // Rocks
         for (Rock r : rocks) {
             if (r.isPassed()) continue;
             if (overlaps(player.hitX(), player.hitY(),
@@ -302,7 +333,6 @@ public class GameWorld {
             if (r.getX() + Rock.SIZE < player.getX()) r.markPassed();
         }
 
-        // Ceiling gaps
         for (CeilingGap c : ceilings) {
             if (c.isPassed()) continue;
             if (overlaps(player.hitX(), player.hitY(),
@@ -315,7 +345,6 @@ public class GameWorld {
                 c.markPassed();
         }
 
-        // Aliens
         for (Alien a : aliens) {
             if (a.isDead()) continue;
 
@@ -342,7 +371,6 @@ public class GameWorld {
             }
         }
 
-        // Gems — sparkle on collect, dust stays for hits only
         for (Collectible g : gems) {
             if (g.isCollected()) continue;
             if (overlaps(player.hitX(), player.hitY(),
@@ -351,12 +379,12 @@ public class GameWorld {
                          g.hitW(), g.hitH())) {
                 g.collect();
                 score += 5;
-                spawnSparkle(g.getX(), g.getY());          // ← sparkle here
+                spawnSparkle(g.getX(), g.getY());
             }
         }
     }
 
-    // ── Helpers ────────────────────────────────────────────────
+    // Helpers
 
     private void triggerHit() {
         boolean died = player.hit();
