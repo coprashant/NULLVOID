@@ -24,10 +24,10 @@ public class NullVoid extends ApplicationAdapter {
     public Viewport            viewport;
     public SpriteBatch         batch;
 
-    public GameWorld     world;
-    public GameUI        ui;
-    public InputHandler  input;
-    public AudioManager  audio;
+    public GameWorld    world;
+    public GameUI       ui;
+    public InputHandler input;
+    public AudioManager audio;
 
     private Preferences prefs;
 
@@ -64,13 +64,8 @@ public class NullVoid extends ApplicationAdapter {
 
         if (state == State.PLAYING) {
             world.update(delta, input);
-
-            // Jump SFX
-            if (world.playerJustJumped()) audio.playJump();
-
-            // Gem SFX
+            if (world.playerJustJumped())       audio.playJump();
             if (world.playerJustCollectedGem()) audio.playGem();
-
             if (world.isGameOver()) {
                 state = State.GAME_OVER;
                 audio.stopBGM();
@@ -109,7 +104,8 @@ public class NullVoid extends ApplicationAdapter {
 
         switch (state) {
             case MENU:
-                if (input.isStart()) {
+                // Touch allowed on menu to start
+                if (input.isStartWithTouch()) {
                     int savedBest = prefs.getInteger(KEY_HIGH_SCORE, 0);
                     world.reset();
                     world.setHighScore(savedBest);
@@ -127,15 +123,17 @@ public class NullVoid extends ApplicationAdapter {
                 break;
 
             case PAUSED:
+                // Mute checked before resume so a mute tap isn't also a resume
                 if (ui.wasMuteToggled()) audio.toggleMute();
-                if (input.isPause() || input.isStart() || pauseBtn) {
+                if (input.isPause() || input.isStart()) {
                     state = State.PLAYING;
                     audio.resumeBGM();
                 }
                 break;
 
             case GAME_OVER:
-                if (input.isStart()) state = State.MENU;
+                // Touch allowed on game over to restart
+                if (input.isStartWithTouch()) state = State.MENU;
                 break;
         }
     }

@@ -28,8 +28,11 @@ public class InputHandler {
 
     public boolean isStart() {
         return Gdx.input.isKeyJustPressed(Input.Keys.SPACE)
-            || Gdx.input.isKeyJustPressed(Input.Keys.ENTER)
-            || Gdx.input.justTouched();
+            || Gdx.input.isKeyJustPressed(Input.Keys.ENTER);
+    }
+
+    public boolean isStartWithTouch() {
+        return isStart() || Gdx.input.justTouched();
     }
 
     public boolean isPause() {

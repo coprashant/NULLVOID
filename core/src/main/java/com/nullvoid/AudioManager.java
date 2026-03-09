@@ -11,9 +11,9 @@ public class AudioManager {
     private static final String PREFS_NAME = "nullvoid.prefs";
     private static final String KEY_MUTED  = "muted";
 
-    private static final float BGM_VOLUME  = 0.6f;
+    private static final float BGM_VOLUME  = 0.4f;
     private static final float SFX_VOLUME  = 0.8f;
-    private static final float GEM_VOLUME  = 0.9f;
+    private static final float GEM_VOLUME  = 1.0f;
 
     private Music bgm;
     private Sound jumpSfx;

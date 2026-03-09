@@ -45,14 +45,14 @@ public class GameUI {
     private static final float ICON_W = 16f;
     private static final float ICON_H = 16f;
 
-    // Pause button in HUD
+    // Pause button sits in the far top-left corner
+    private static final float BTN_X   = 3f;
     private static final float BTN_W   = 14f;
     private static final float BTN_H   = 14f;
-    private static final float BTN_PAD = 6f;
-    private float pauseBtnX = 0f;
+    private static final float BTN_PAD = 5f;  // gap between button and lives
     private float pauseBtnY = 0f;
 
-    // Mute button in pause screen — sized larger for easy clicking
+    // Mute button in pause screen
     private static final float MUTE_W = 60f;
     private static final float MUTE_H = 16f;
     private float muteBtnX = 0f;
@@ -149,15 +149,13 @@ public class GameUI {
         touchVec.set(Gdx.input.getX(), Gdx.input.getY(), 0);
         lastCam.unproject(touchVec);
 
-        // Pause button — only active during gameplay
         if (state == NullVoid.State.PLAYING) {
-            if (touchVec.x >= pauseBtnX && touchVec.x <= pauseBtnX + BTN_W
-             && touchVec.y >= pauseBtnY && touchVec.y <= pauseBtnY + BTN_H) {
+            if (touchVec.x >= BTN_X      && touchVec.x <= BTN_X + BTN_W
+             && touchVec.y >= pauseBtnY  && touchVec.y <= pauseBtnY + BTN_H) {
                 pauseButtonPressed = true;
             }
         }
 
-        // Mute button — only active on pause screen
         if (state == NullVoid.State.PAUSED) {
             if (touchVec.x >= muteBtnX && touchVec.x <= muteBtnX + MUTE_W
              && touchVec.y >= muteBtnY && touchVec.y <= muteBtnY + MUTE_H) {
@@ -166,7 +164,7 @@ public class GameUI {
         }
     }
 
-    // Public render — now receives AudioManager for mute state display
+    // Public render
 
     public void render(NullVoid.State state, GameWorld world,
                        OrthographicCamera cam, AudioManager audio) {
@@ -176,10 +174,10 @@ public class GameUI {
         update(Gdx.graphics.getDeltaTime(), state, audio.isMuted());
 
         switch (state) {
-            case MENU:      drawMenu(world);                  break;
-            case PLAYING:   drawHUD(world);                   break;
+            case MENU:      drawMenu(world);                    break;
+            case PLAYING:   drawHUD(world);                     break;
             case PAUSED:    drawPaused(world, audio.isMuted()); break;
-            case GAME_OVER: drawGameOver(world);              break;
+            case GAME_OVER: drawGameOver(world);                break;
         }
     }
 
@@ -321,42 +319,37 @@ public class GameUI {
         shapes.rect(0, HUD_Y - 1f, W, 1f);
         shapes.end();
 
-        batch.begin();
-
         float iconY = HUD_Y + (HUD_H - ICON_H) / 2f;
         float numY  = HUD_Y + (HUD_H - PixelFont.DH) / 2f;
+        pauseBtnY   = HUD_Y + (HUD_H - BTN_H) / 2f;
 
-        // Lives
+        // Pause button — far left corner
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(0.1f, 0.1f, 0.18f, 0.7f);
+        shapes.rect(BTN_X, pauseBtnY, BTN_W, BTN_H);
+        shapes.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.5f);
+        shapes.rect(BTN_X,              pauseBtnY,           BTN_W, 1f);
+        shapes.rect(BTN_X,              pauseBtnY + BTN_H - 1f, BTN_W, 1f);
+        shapes.rect(BTN_X,              pauseBtnY,           1f, BTN_H);
+        shapes.rect(BTN_X + BTN_W - 1f, pauseBtnY,           1f, BTN_H);
+        float barW = 2f, barH = BTN_H * 0.55f;
+        float barY = pauseBtnY + (BTN_H - barH) / 2f;
+        shapes.setColor(1f, 1f, 1f, 0.9f);
+        shapes.rect(BTN_X + 3f,            barY, barW, barH);
+        shapes.rect(BTN_X + BTN_W - 5f,    barY, barW, barH);
+        shapes.end();
+
+        batch.begin();
+
+        // Lives — start after the pause button
+        float livesStartX = BTN_X + BTN_W + BTN_PAD;
         for (int i = 0; i < Player.MAX_LIVES; i++) {
             boolean alive = i < world.getLives();
             batch.setColor(alive ? 1f : 0.35f, alive ? 1f : 0.35f,
                            alive ? 1f : 0.45f, alive ? 1f : 0.5f);
-            batch.draw(lifeIcon, 5f + i * (ICON_W + 3f), iconY, ICON_W, ICON_H);
+            batch.draw(lifeIcon, livesStartX + i * (ICON_W + 3f), iconY, ICON_W, ICON_H);
         }
         batch.setColor(1f, 1f, 1f, 1f);
-
-        // Pause button
-        float livesEndX = 5f + Player.MAX_LIVES * (ICON_W + 3f) + BTN_PAD;
-        pauseBtnX = livesEndX;
-        pauseBtnY = iconY + (ICON_H - BTN_H) / 2f;
-        batch.end();
-
-        shapes.begin(ShapeRenderer.ShapeType.Filled);
-        shapes.setColor(0.1f, 0.1f, 0.18f, 0.7f);
-        shapes.rect(pauseBtnX, pauseBtnY, BTN_W, BTN_H);
-        shapes.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.5f);
-        shapes.rect(pauseBtnX,              pauseBtnY,           BTN_W, 1f);
-        shapes.rect(pauseBtnX,              pauseBtnY + BTN_H - 1f, BTN_W, 1f);
-        shapes.rect(pauseBtnX,              pauseBtnY,           1f, BTN_H);
-        shapes.rect(pauseBtnX + BTN_W - 1f, pauseBtnY,           1f, BTN_H);
-        float barW = 2f, barH = BTN_H * 0.55f;
-        float barY = pauseBtnY + (BTN_H - barH) / 2f;
-        shapes.setColor(1f, 1f, 1f, 0.9f);
-        shapes.rect(pauseBtnX + 3f,            barY, barW, barH);
-        shapes.rect(pauseBtnX + BTN_W - 5f,    barY, barW, barH);
-        shapes.end();
-
-        batch.begin();
 
         // Centre — distance
         int   dist  = world.getDistance();
@@ -439,10 +432,10 @@ public class GameUI {
         shapes.setColor(muted ? COL_RED.r : COL_CYAN.r,
                         muted ? COL_RED.g : COL_CYAN.g,
                         muted ? COL_RED.b : COL_CYAN.b, 0.6f);
-        shapes.rect(muteBtnX,                      muteBtnY,          layout.width + 8f, 1f);
-        shapes.rect(muteBtnX,                      muteBtnY + MUTE_H, layout.width + 8f, 1f);
-        shapes.rect(muteBtnX,                      muteBtnY,          1f, MUTE_H);
-        shapes.rect(muteBtnX + layout.width + 7f,  muteBtnY,          1f, MUTE_H);
+        shapes.rect(muteBtnX,                     muteBtnY,          layout.width + 8f, 1f);
+        shapes.rect(muteBtnX,                     muteBtnY + MUTE_H, layout.width + 8f, 1f);
+        shapes.rect(muteBtnX,                     muteBtnY,          1f, MUTE_H);
+        shapes.rect(muteBtnX + layout.width + 7f, muteBtnY,          1f, MUTE_H);
         shapes.end();
 
         batch.begin();
