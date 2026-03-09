@@ -45,11 +45,11 @@ public class GameUI {
     private static final float ICON_W = 16f;
     private static final float ICON_H = 16f;
 
-    // Pause button sits in the far top-left corner
+    // Pause button — far top-left corner
     private static final float BTN_X   = 3f;
     private static final float BTN_W   = 14f;
     private static final float BTN_H   = 14f;
-    private static final float BTN_PAD = 5f;  // gap between button and lives
+    private static final float BTN_PAD = 5f;
     private float pauseBtnY = 0f;
 
     // Mute button in pause screen
@@ -64,7 +64,7 @@ public class GameUI {
     private boolean muteToggled            = false;
 
     private final SpriteBatch batch;
-    private BitmapFont        fontSm, fontMd, fontLg, fontPopup;
+    private BitmapFont        fontSm, fontMd, fontLg, fontPopup, fontBanner;
     private final GlyphLayout layout = new GlyphLayout();
     private ShapeRenderer     shapes;
 
@@ -76,10 +76,11 @@ public class GameUI {
     // Lifecycle
 
     public void create() {
-        fontSm    = new BitmapFont(); fontSm.getData().setScale(0.72f);
-        fontMd    = new BitmapFont(); fontMd.getData().setScale(0.95f);
-        fontLg    = new BitmapFont(); fontLg.getData().setScale(1.70f);
-        fontPopup = new BitmapFont(); fontPopup.getData().setScale(1.1f);
+        fontSm     = new BitmapFont(); fontSm.getData().setScale(0.72f);
+        fontMd     = new BitmapFont(); fontMd.getData().setScale(0.95f);
+        fontLg     = new BitmapFont(); fontLg.getData().setScale(1.70f);
+        fontPopup  = new BitmapFont(); fontPopup.getData().setScale(1.1f);
+        fontBanner = new BitmapFont(); fontBanner.getData().setScale(2.0f);
 
         shapes    = new ShapeRenderer();
         lifeSheet = new Texture("SmallAstronaut_Idle.png");
@@ -110,7 +111,7 @@ public class GameUI {
         }
     }
 
-    // Button queries — consumed once per frame
+    // Button queries
 
     public boolean wasPauseButtonPressed() {
         boolean v = pauseButtonPressed; pauseButtonPressed = false; return v;
@@ -150,8 +151,8 @@ public class GameUI {
         lastCam.unproject(touchVec);
 
         if (state == NullVoid.State.PLAYING) {
-            if (touchVec.x >= BTN_X      && touchVec.x <= BTN_X + BTN_W
-             && touchVec.y >= pauseBtnY  && touchVec.y <= pauseBtnY + BTN_H) {
+            if (touchVec.x >= BTN_X     && touchVec.x <= BTN_X + BTN_W
+             && touchVec.y >= pauseBtnY && touchVec.y <= pauseBtnY + BTN_H) {
                 pauseButtonPressed = true;
             }
         }
@@ -328,20 +329,20 @@ public class GameUI {
         shapes.setColor(0.1f, 0.1f, 0.18f, 0.7f);
         shapes.rect(BTN_X, pauseBtnY, BTN_W, BTN_H);
         shapes.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.5f);
-        shapes.rect(BTN_X,              pauseBtnY,           BTN_W, 1f);
-        shapes.rect(BTN_X,              pauseBtnY + BTN_H - 1f, BTN_W, 1f);
-        shapes.rect(BTN_X,              pauseBtnY,           1f, BTN_H);
-        shapes.rect(BTN_X + BTN_W - 1f, pauseBtnY,           1f, BTN_H);
+        shapes.rect(BTN_X,              pauseBtnY,               BTN_W, 1f);
+        shapes.rect(BTN_X,              pauseBtnY + BTN_H - 1f,  BTN_W, 1f);
+        shapes.rect(BTN_X,              pauseBtnY,               1f, BTN_H);
+        shapes.rect(BTN_X + BTN_W - 1f, pauseBtnY,               1f, BTN_H);
         float barW = 2f, barH = BTN_H * 0.55f;
         float barY = pauseBtnY + (BTN_H - barH) / 2f;
         shapes.setColor(1f, 1f, 1f, 0.9f);
-        shapes.rect(BTN_X + 3f,            barY, barW, barH);
-        shapes.rect(BTN_X + BTN_W - 5f,    barY, barW, barH);
+        shapes.rect(BTN_X + 3f,           barY, barW, barH);
+        shapes.rect(BTN_X + BTN_W - 5f,   barY, barW, barH);
         shapes.end();
 
         batch.begin();
 
-        // Lives — start after the pause button
+        // Lives — right of pause button
         float livesStartX = BTN_X + BTN_W + BTN_PAD;
         for (int i = 0; i < Player.MAX_LIVES; i++) {
             boolean alive = i < world.getLives();
@@ -392,6 +393,55 @@ public class GameUI {
             fontSm.draw(batch, hint, W - layout.width - 6f, 10f);
         }
 
+        batch.end();
+
+        // Milestone banner — drawn on top of everything
+        drawMilestoneBanner(world.getMilestones());
+    }
+
+    // Milestone banner
+
+    private void drawMilestoneBanner(MilestoneManager ms) {
+        if (!ms.isBannerActive()) return;
+
+        float progress = ms.getBannerTimer() / ms.getBannerMax();
+
+        // Fade in first 15%, hold, fade out last 25%
+        float alpha;
+        if (progress > 0.85f)      alpha = (1f - progress) / 0.15f;
+        else if (progress < 0.25f) alpha = progress / 0.25f;
+        else                       alpha = 1f;
+
+        // Slight scale pulse on entry
+        float scale = 1f + MathUtils.clamp((progress - 0.85f) / 0.15f, 0f, 1f) * 0.15f;
+
+        String text = ms.getBannerText();
+        layout.setText(fontBanner, text);
+        float tw = layout.width * scale;
+        float th = layout.height * scale;
+        float bx = (W - tw) / 2f;
+        float by = H / 2f - th / 2f + 10f;
+
+        // Dark backing strip
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        float pad = 12f;
+        shapes.setColor(0f, 0f, 0f, alpha * 0.55f);
+        shapes.rect(bx - pad, by - pad * 0.5f, tw + pad * 2f, th + pad);
+        // Gold top/bottom border lines
+        shapes.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, alpha * 0.8f);
+        shapes.rect(bx - pad, by + th + pad * 0.5f, tw + pad * 2f, 1.5f);
+        shapes.rect(bx - pad, by - pad * 0.5f,      tw + pad * 2f, 1.5f);
+        shapes.end();
+
+        batch.begin();
+        // Gold glow pass
+        fontBanner.getData().setScale(2.0f * scale);
+        fontBanner.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, alpha * 0.35f);
+        fontBanner.draw(batch, text, bx + 1f, by + th - 1f);
+        // Main white text
+        fontBanner.setColor(1f, 1f, 1f, alpha);
+        fontBanner.draw(batch, text, bx, by + th);
+        fontBanner.getData().setScale(2.0f);
         batch.end();
     }
 
@@ -511,6 +561,7 @@ public class GameUI {
         fontMd.dispose();
         fontLg.dispose();
         fontPopup.dispose();
+        fontBanner.dispose();
         shapes.dispose();
         lifeSheet.dispose();
         PixelFont.disposeAssets();

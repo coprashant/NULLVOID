@@ -11,6 +11,7 @@ public class GameWorld {
     private static final float INTRO_SPEED = 150f;
     private static final float INTRO_DIST  = 10f;
     private static final float SPEED_LERP  = 12f;
+    private static final float MAX_SPEED_CAP = 420f;
 
     private static final float HIT_STUN_DURATION     = 0.4f;
     private static final float HIT_STUN_SPEED_FACTOR = 0.25f;
@@ -28,22 +29,19 @@ public class GameWorld {
     private float   distance  = 0f;
     private boolean gameOver  = false;
 
-    private float alienInterval = 5f;
-    private float rockInterval  = 3.5f;
-    private float ceilInterval  = 8f;
-    private float alienTimer    = 0f;
-    private float rockTimer     = 0f;
-    private float ceilTimer     = 0f;
-    private float gemTimer      = 0f;
-    private float gemInterval   = 3f;
+    private float alienTimer  = 0f;
+    private float rockTimer   = 0f;
+    private float ceilTimer   = 0f;
+    private float gemTimer    = 0f;
+    private float gemInterval = 3f;
 
-    private static final float SPAWN_SEPARATION = 1.8f;
     private float lastSpawnTime = 0f;
     private float gameTime      = 0f;
 
-    // One-frame flags read by NullVoid for audio
     private boolean jumpedThisFrame       = false;
     private boolean gemCollectedThisFrame = false;
+
+    private MilestoneManager milestones = new MilestoneManager();
 
     private Player               player;
     private Background           background;
@@ -84,6 +82,7 @@ public class GameWorld {
         dust.clear();
         sparkles.clear();
         popups.clear();
+        milestones.reset();
 
         speed         = 0f;
         targetSpeed   = 0f;
@@ -98,9 +97,6 @@ public class GameWorld {
         rockTimer     = 0f;
         ceilTimer     = 0f;
         gemTimer      = 0f;
-        alienInterval = 5f;
-        rockInterval  = 3.5f;
-        ceilInterval  = 8f;
         gameTime      = 0f;
         lastSpawnTime = 0f;
     }
@@ -108,7 +104,6 @@ public class GameWorld {
     // Update
 
     public void update(float delta, InputHandler input) {
-        // Reset one-frame flags
         jumpedThisFrame       = false;
         gemCollectedThisFrame = false;
 
@@ -136,17 +131,26 @@ public class GameWorld {
             return;
         }
 
+        milestones.update(delta, (int) distance);
+
+        if (milestones.justHitMilestone()) {
+            // Jolt speed forward on milestone hit
+            targetSpeed = Math.min(targetSpeed + milestones.getSpeedBonus() * 0.3f,
+                                   MAX_SPEED_CAP);
+        }
+
         boolean wasJumping = player.isJumping();
         player.update(delta, input);
-        // Detect jump start — player just became airborne
         if (!wasJumping && player.isJumping()) jumpedThisFrame = true;
+
+        float runCap = Math.min(RUN_SPEED + milestones.getSpeedBonus(), MAX_SPEED_CAP);
 
         Player.MoveState ms = player.getMoveState();
         switch (ms) {
             case WALK_RIGHT: targetSpeed = WALK_SPEED; scrollDir =  1f; break;
-            case RUN_RIGHT:  targetSpeed = RUN_SPEED;  scrollDir =  1f; break;
+            case RUN_RIGHT:  targetSpeed = runCap;     scrollDir =  1f; break;
             case WALK_LEFT:  targetSpeed = WALK_SPEED; scrollDir = -1f; break;
-            case RUN_LEFT:   targetSpeed = RUN_SPEED;  scrollDir = -1f; break;
+            case RUN_LEFT:   targetSpeed = runCap;     scrollDir = -1f; break;
             default:         targetSpeed = 0f;                          break;
         }
 
@@ -160,11 +164,6 @@ public class GameWorld {
 
         if (scrollDir > 0 && effectiveSpeed > 0)
             distance += effectiveSpeed * delta * 0.04f;
-
-        float t = Math.min(distance / 500f, 1f);
-        alienInterval = 5f   - t * 2.5f;
-        rockInterval  = 3.5f - t * 1.3f;
-        ceilInterval  = 8f   - t * 3f;
 
         background.update(delta, effectiveSpeed * scrollDir);
 
@@ -207,22 +206,23 @@ public class GameWorld {
 
     // Accessors
 
-    public boolean           isGameOver()              { return gameOver;  }
-    public int               getScore()                { return score;     }
-    public int               getHighScore()            { return highScore; }
-    public int               getLives()                { return player.getLives(); }
-    public int               getDistance()             { return (int)distance; }
-    public float             getSpeed()                { return speed; }
-    public boolean           isIntro()                 { return introActive; }
-    public void              setHighScore(int hs)      { highScore = hs; }
-    public Array<ScorePopup> getPopups()               { return popups; }
-    public boolean           playerJustJumped()        { return jumpedThisFrame; }
-    public boolean           playerJustCollectedGem()  { return gemCollectedThisFrame; }
+    public boolean           isGameOver()             { return gameOver;  }
+    public int               getScore()               { return score;     }
+    public int               getHighScore()           { return highScore; }
+    public int               getLives()               { return player.getLives(); }
+    public int               getDistance()            { return (int) distance; }
+    public float             getSpeed()               { return speed; }
+    public boolean           isIntro()                { return introActive; }
+    public void              setHighScore(int hs)     { highScore = hs; }
+    public Array<ScorePopup> getPopups()              { return popups; }
+    public boolean           playerJustJumped()       { return jumpedThisFrame; }
+    public boolean           playerJustCollectedGem() { return gemCollectedThisFrame; }
+    public MilestoneManager  getMilestones()          { return milestones; }
 
-    // Spawning
+    // Spawning — intervals driven by MilestoneManager
 
     private boolean canSpawnObstacle() {
-        return (gameTime - lastSpawnTime) >= SPAWN_SEPARATION;
+        return (gameTime - lastSpawnTime) >= milestones.getSpawnSeparation();
     }
 
     private void markSpawned() { lastSpawnTime = gameTime; }
@@ -230,7 +230,7 @@ public class GameWorld {
     private void spawnAliens(float delta) {
         if (scrollDir < 0 || speed < 10f) return;
         alienTimer += delta;
-        if (alienTimer < alienInterval) return;
+        if (alienTimer < milestones.getAlienInterval()) return;
         alienTimer = 0f;
         if (!canSpawnObstacle()) return;
         markSpawned();
@@ -241,7 +241,7 @@ public class GameWorld {
     private void spawnRocks(float delta) {
         if (scrollDir < 0 || speed < 10f) return;
         rockTimer += delta;
-        if (rockTimer < rockInterval) return;
+        if (rockTimer < milestones.getRockInterval()) return;
         rockTimer = 0f;
         if (!canSpawnObstacle()) return;
         markSpawned();
@@ -253,7 +253,7 @@ public class GameWorld {
     private void spawnCeilings(float delta) {
         if (scrollDir < 0 || speed < 10f) return;
         ceilTimer += delta;
-        if (ceilTimer < ceilInterval) return;
+        if (ceilTimer < milestones.getCeilInterval()) return;
         ceilTimer = 0f;
         if (!canSpawnObstacle()) return;
         markSpawned();
@@ -391,7 +391,7 @@ public class GameWorld {
         if (finalScore > highScore) highScore = finalScore;
     }
 
-    private void spawnDust(float x, float y) {
+    private void spawnDust(float x, float y)  {
         DustEffect d = new DustEffect(); d.play(x, y); dust.add(d);
     }
 
