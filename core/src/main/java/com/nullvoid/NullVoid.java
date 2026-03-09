@@ -30,7 +30,7 @@ public class NullVoid extends ApplicationAdapter {
 
     private Preferences prefs;
 
-    // ── Lifecycle ──────────────────────────────────────────────
+    // Lifecycle
 
     @Override
     public void create() {
@@ -59,7 +59,6 @@ public class NullVoid extends ApplicationAdapter {
 
         handleInput();
 
-        // Only tick the world when actively playing
         if (state == State.PLAYING) {
             world.update(delta, input);
             if (world.isGameOver()) {
@@ -91,28 +90,33 @@ public class NullVoid extends ApplicationAdapter {
         ui.dispose();
     }
 
-    // ── Input ──────────────────────────────────────────────────
+    // Input
 
     private void handleInput() {
+        // ui.render() must run first each frame so wasPauseButtonPressed()
+        // reflects the current frame's touch — render() calls ui.render() after
+        // handleInput(), so button presses land on the NEXT frame (one frame lag
+        // is imperceptible at 60fps and avoids ordering issues).
+        boolean pauseBtn = ui.wasPauseButtonPressed();
+
         switch (state) {
             case MENU:
                 if (input.isStart()) {
                     int savedBest = prefs.getInteger(KEY_HIGH_SCORE, 0);
                     world.reset();
                     world.setHighScore(savedBest);
-                    ui.hudHintTimer = 3.5f;   // reset pause hint for new run
+                    ui.hudHintTimer = 3.5f;
                     state = State.PLAYING;
                 }
                 break;
 
             case PLAYING:
-                // ESC / P pauses mid-game
-                if (input.isPause()) state = State.PAUSED;
+                if (input.isPause() || pauseBtn) state = State.PAUSED;
                 break;
 
             case PAUSED:
-                // ESC / P or SPACE resumes
-                if (input.isPause() || input.isStart()) state = State.PLAYING;
+                if (input.isPause() || input.isStart() || pauseBtn)
+                    state = State.PLAYING;
                 break;
 
             case GAME_OVER:
@@ -121,7 +125,7 @@ public class NullVoid extends ApplicationAdapter {
         }
     }
 
-    // ── Persistence ────────────────────────────────────────────
+    // Persistence
 
     private void saveHighScore() {
         int current = prefs.getInteger(KEY_HIGH_SCORE, 0);

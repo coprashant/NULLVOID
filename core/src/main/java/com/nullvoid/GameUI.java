@@ -1,5 +1,6 @@
 package com.nullvoid;
 
+import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
 import com.badlogic.gdx.graphics.Texture;
@@ -9,6 +10,7 @@ import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Vector3;
 
 public class GameUI {
 
@@ -38,18 +40,31 @@ public class GameUI {
 
     float hudHintTimer = 3.5f;
 
-    // HUD strip height matches native digit height + padding
     private static final float HUD_H  = PixelFont.DH + 4f;
     private static final float HUD_Y  = H - HUD_H;
     private static final float ICON_W = 16f;
     private static final float ICON_H = 16f;
 
+    // Pause button — sits after the life icons
+    private static final float BTN_W    = 14f;
+    private static final float BTN_H    = 14f;
+    private static final float BTN_PAD  = 6f;   // gap from last life icon
+    // X is calculated at runtime after the lives row; stored for hit-testing
+    private float pauseBtnX = 0f;
+    private float pauseBtnY = 0f;
+
+    // Viewport reference for unprojecting touch coords
+    private OrthographicCamera lastCam;
+    private final Vector3 touchVec = new Vector3();
+
+    // Flag read by NullVoid each frame
+    private boolean pauseButtonPressed = false;
+
     private final SpriteBatch batch;
-    private BitmapFont        fontSm, fontMd, fontLg;
+    private BitmapFont        fontSm, fontMd, fontLg, fontPopup;
     private final GlyphLayout layout = new GlyphLayout();
     private ShapeRenderer     shapes;
 
-    // SmallAstronaut lives icons
     private Texture       lifeSheet;
     private TextureRegion lifeIcon;
 
@@ -58,9 +73,10 @@ public class GameUI {
     // Lifecycle
 
     public void create() {
-        fontSm = new BitmapFont(); fontSm.getData().setScale(0.72f);
-        fontMd = new BitmapFont(); fontMd.getData().setScale(0.95f);
-        fontLg = new BitmapFont(); fontLg.getData().setScale(1.70f);
+        fontSm    = new BitmapFont(); fontSm.getData().setScale(0.72f);
+        fontMd    = new BitmapFont(); fontMd.getData().setScale(0.95f);
+        fontLg    = new BitmapFont(); fontLg.getData().setScale(1.70f);
+        fontPopup = new BitmapFont(); fontPopup.getData().setScale(1.1f);
 
         shapes    = new ShapeRenderer();
         lifeSheet = new Texture("SmallAstronaut_Idle.png");
@@ -91,6 +107,14 @@ public class GameUI {
         }
     }
 
+    // Pause button query — consumed once per frame by NullVoid
+
+    public boolean wasPauseButtonPressed() {
+        boolean v = pauseButtonPressed;
+        pauseButtonPressed = false;
+        return v;
+    }
+
     // Update
 
     private void update(float delta) {
@@ -114,6 +138,16 @@ public class GameUI {
             starAlpha[i] += MathUtils.sin(time * 1.8f + i) * delta * 0.2f;
             starAlpha[i]  = MathUtils.clamp(starAlpha[i], 0.08f, 1.0f);
         }
+
+        // Check touch/click against pause button bounds
+        if (lastCam != null && Gdx.input.justTouched()) {
+            touchVec.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+            lastCam.unproject(touchVec);
+            if (touchVec.x >= pauseBtnX && touchVec.x <= pauseBtnX + BTN_W
+             && touchVec.y >= pauseBtnY && touchVec.y <= pauseBtnY + BTN_H) {
+                pauseButtonPressed = true;
+            }
+        }
     }
 
     // Public render
@@ -122,7 +156,8 @@ public class GameUI {
                        OrthographicCamera cam) {
         shapes.setProjectionMatrix(cam.combined);
         batch.setProjectionMatrix(cam.combined);
-        update(com.badlogic.gdx.Gdx.graphics.getDeltaTime());
+        lastCam = cam;
+        update(Gdx.graphics.getDeltaTime());
 
         switch (state) {
             case MENU:      drawMenu(world);     break;
@@ -195,7 +230,6 @@ public class GameUI {
 
         shapes.setColor(0.01f, 0.03f, 0.08f, glitchAlpha);
         shapes.rect(bx, by, bw, bh);
-
         shapes.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.2f);
         shapes.rect(bx,      by,      bw, 1f);
         shapes.rect(bx,      by + bh, bw, 1f);
@@ -265,9 +299,8 @@ public class GameUI {
 
     private void drawHUD(GameWorld world) {
         if (hudHintTimer > 0f)
-            hudHintTimer -= com.badlogic.gdx.Gdx.graphics.getDeltaTime();
+            hudHintTimer -= Gdx.graphics.getDeltaTime();
 
-        // Thin separator line
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.18f);
         shapes.rect(0, HUD_Y - 1f, W, 1f);
@@ -278,18 +311,43 @@ public class GameUI {
         float iconY = HUD_Y + (HUD_H - ICON_H) / 2f;
         float numY  = HUD_Y + (HUD_H - PixelFont.DH) / 2f;
 
-        // Left — small astronaut icons for lives
+        // Lives
         for (int i = 0; i < Player.MAX_LIVES; i++) {
-            if (i < world.getLives()) {
-                batch.setColor(1f, 1f, 1f, 1f);
-            } else {
-                batch.setColor(0.35f, 0.35f, 0.45f, 0.5f);
-            }
+            boolean alive = i < world.getLives();
+            batch.setColor(alive ? 1f : 0.35f, alive ? 1f : 0.35f,
+                           alive ? 1f : 0.45f, alive ? 1f : 0.5f);
             batch.draw(lifeIcon, 5f + i * (ICON_W + 3f), iconY, ICON_W, ICON_H);
         }
         batch.setColor(1f, 1f, 1f, 1f);
 
-        // Centre — distance e.g. 107 - m
+        // Pause button — two small vertical bars drawn after the lives
+        float livesEndX = 5f + Player.MAX_LIVES * (ICON_W + 3f) + BTN_PAD;
+        pauseBtnX = livesEndX;
+        pauseBtnY = iconY + (ICON_H - BTN_H) / 2f;
+        batch.end();
+
+        // Draw button background and bars with ShapeRenderer
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        // Subtle dark background
+        shapes.setColor(0.1f, 0.1f, 0.18f, 0.7f);
+        shapes.rect(pauseBtnX, pauseBtnY, BTN_W, BTN_H);
+        // Cyan border
+        shapes.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.5f);
+        shapes.rect(pauseBtnX,             pauseBtnY, BTN_W, 1f);
+        shapes.rect(pauseBtnX,             pauseBtnY + BTN_H - 1f, BTN_W, 1f);
+        shapes.rect(pauseBtnX,             pauseBtnY, 1f, BTN_H);
+        shapes.rect(pauseBtnX + BTN_W - 1f, pauseBtnY, 1f, BTN_H);
+        // The || bars
+        float barW = 2f, barH = BTN_H * 0.55f;
+        float barY = pauseBtnY + (BTN_H - barH) / 2f;
+        shapes.setColor(1f, 1f, 1f, 0.9f);
+        shapes.rect(pauseBtnX + 3f,       barY, barW, barH);
+        shapes.rect(pauseBtnX + BTN_W - 5f, barY, barW, barH);
+        shapes.end();
+
+        batch.begin();
+
+        // Centre — distance
         int   dist  = world.getDistance();
         float distW = PixelFont.measureInt(dist) + PixelFont.DW * 2f + 6f;
         float cx    = (W - distW) / 2f;
@@ -304,12 +362,23 @@ public class GameUI {
 
         // Right — gem icon x score
         int   score  = world.getScore();
-        float scoreW = PixelFont.ICON_SIZE + 2f + PixelFont.DW + PixelFont.measureInt(score) + 4f;
+        float scoreW = PixelFont.ICON_SIZE + 2f + PixelFont.DW
+                     + PixelFont.measureInt(score) + 4f;
         float rx     = W - scoreW - 5f;
         rx = PixelFont.drawGemIcon(batch, rx, numY);
         rx = PixelFont.drawTimes(batch, rx, numY);
         rx += 2f;
         PixelFont.drawInt(batch, score, rx, numY);
+
+        // Popups
+        for (ScorePopup p : world.getPopups()) {
+            if (!p.isActive()) continue;
+            fontPopup.setColor(p.r, p.g, p.b, p.getAlpha());
+            layout.setText(fontPopup, p.getText());
+            fontPopup.draw(batch, p.getText(),
+                           p.getX() - layout.width / 2f, p.getY());
+        }
+        fontPopup.setColor(1f, 1f, 1f, 1f);
 
         // Pause hint
         if (hudHintTimer > 0f) {
@@ -344,7 +413,6 @@ public class GameUI {
         fontSm.setColor(COL_PURPLE.r, COL_PURPLE.g, COL_PURPLE.b, 0.9f);
         drawCenteredAt(fontSm, "LIVES: " + world.getLives() + " / " + Player.MAX_LIVES,
                        bx, titleY - 70f);
-
         if (blinkOn) {
             fontSm.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, 1f);
             drawCenteredAt(fontSm, "[ PRESS SPACE TO RESUME ]", bx, by + 15f);
@@ -376,7 +444,6 @@ public class GameUI {
         drawCenteredAt(fontMd, "DISTANCE: " + world.getDistance() + "m", bx, by + 60f);
         fontMd.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 1f);
         drawCenteredAt(fontMd, "PERSONAL BEST: " + world.getHighScore(), bx, by + 40f);
-
         if (blinkOn) {
             fontMd.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, 1f);
             drawCenteredAt(fontMd, "PRESS SPACE TO RESTART", bx, 40f);
@@ -412,6 +479,7 @@ public class GameUI {
         fontSm.dispose();
         fontMd.dispose();
         fontLg.dispose();
+        fontPopup.dispose();
         shapes.dispose();
         lifeSheet.dispose();
         PixelFont.disposeAssets();
