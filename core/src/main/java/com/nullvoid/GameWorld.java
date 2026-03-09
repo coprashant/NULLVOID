@@ -41,19 +41,19 @@ public class GameWorld {
     private float lastSpawnTime = 0f;
     private float gameTime      = 0f;
 
-    private static final float GEM_Y_GROUND = Player.GROUND_Y + Player.SIZE * 0.45f;
-    private static final float GEM_Y_ROCK   = Player.GROUND_Y + Rock.SIZE + 10f;
-    private static final float ROCK_RADIUS  = 28f;
+    // One-frame flags read by NullVoid for audio
+    private boolean jumpedThisFrame       = false;
+    private boolean gemCollectedThisFrame = false;
 
     private Player               player;
     private Background           background;
-    private Array<Alien>         aliens    = new Array<>();
-    private Array<Rock>          rocks     = new Array<>();
-    private Array<CeilingGap>    ceilings  = new Array<>();
-    private Array<Collectible>   gems      = new Array<>();
-    private Array<DustEffect>    dust      = new Array<>();
-    private Array<SparkleEffect> sparkles  = new Array<>();
-    private Array<ScorePopup>    popups    = new Array<>();
+    private Array<Alien>         aliens   = new Array<>();
+    private Array<Rock>          rocks    = new Array<>();
+    private Array<CeilingGap>    ceilings = new Array<>();
+    private Array<Collectible>   gems     = new Array<>();
+    private Array<DustEffect>    dust     = new Array<>();
+    private Array<SparkleEffect> sparkles = new Array<>();
+    private Array<ScorePopup>    popups   = new Array<>();
 
     private Random rng = new Random();
 
@@ -108,6 +108,10 @@ public class GameWorld {
     // Update
 
     public void update(float delta, InputHandler input) {
+        // Reset one-frame flags
+        jumpedThisFrame       = false;
+        gemCollectedThisFrame = false;
+
         if (gameOver) return;
 
         gameTime += delta;
@@ -132,7 +136,10 @@ public class GameWorld {
             return;
         }
 
+        boolean wasJumping = player.isJumping();
         player.update(delta, input);
+        // Detect jump start — player just became airborne
+        if (!wasJumping && player.isJumping()) jumpedThisFrame = true;
 
         Player.MoveState ms = player.getMoveState();
         switch (ms) {
@@ -200,15 +207,17 @@ public class GameWorld {
 
     // Accessors
 
-    public boolean         isGameOver()         { return gameOver;  }
-    public int             getScore()           { return score;     }
-    public int             getHighScore()       { return highScore; }
-    public int             getLives()           { return player.getLives(); }
-    public int             getDistance()        { return (int)distance; }
-    public float           getSpeed()           { return speed; }
-    public boolean         isIntro()            { return introActive; }
-    public void            setHighScore(int hs) { highScore = hs; }
-    public Array<ScorePopup> getPopups()        { return popups; }
+    public boolean           isGameOver()              { return gameOver;  }
+    public int               getScore()                { return score;     }
+    public int               getHighScore()            { return highScore; }
+    public int               getLives()                { return player.getLives(); }
+    public int               getDistance()             { return (int)distance; }
+    public float             getSpeed()                { return speed; }
+    public boolean           isIntro()                 { return introActive; }
+    public void              setHighScore(int hs)      { highScore = hs; }
+    public Array<ScorePopup> getPopups()               { return popups; }
+    public boolean           playerJustJumped()        { return jumpedThisFrame; }
+    public boolean           playerJustCollectedGem()  { return gemCollectedThisFrame; }
 
     // Spawning
 
@@ -216,9 +225,7 @@ public class GameWorld {
         return (gameTime - lastSpawnTime) >= SPAWN_SEPARATION;
     }
 
-    private void markSpawned() {
-        lastSpawnTime = gameTime;
-    }
+    private void markSpawned() { lastSpawnTime = gameTime; }
 
     private void spawnAliens(float delta) {
         if (scrollDir < 0 || speed < 10f) return;
@@ -258,12 +265,10 @@ public class GameWorld {
         gemTimer += delta;
         if (gemTimer < gemInterval) return;
         gemTimer = 0f;
-
         float spawnX = NullVoid.W + 60f;
         for (Alien a : aliens) {
             if (!a.isDead() && Math.abs(a.getX() - spawnX) < 120f) return;
         }
-
         int count = rng.nextInt(3) + 1;
         for (int i = 0; i < count; i++)
             gems.add(new Collectible(spawnX + i * 40f));
@@ -319,8 +324,7 @@ public class GameWorld {
             if (overlaps(player.hitX(), player.hitY(),
                          player.hitW(), player.hitH(),
                          r.hitX(), r.hitY(), r.hitW(), r.hitH())) {
-                triggerHit();
-                return;
+                triggerHit(); return;
             }
             if (r.getX() + Rock.SIZE < player.getX()) r.markPassed();
         }
@@ -337,7 +341,6 @@ public class GameWorld {
 
         for (Alien a : aliens) {
             if (a.isDead()) continue;
-
             boolean stomped = player.isJumping()
                 && overlaps(player.stompX(), player.stompY(),
                             player.stompW(), player.stompH(),
@@ -346,12 +349,9 @@ public class GameWorld {
                 a.die();
                 score += 10;
                 spawnDust(a.getX(), a.getY() + Alien.SIZE * 0.5f);
-                // Gold popup for stomp
-                spawnPopup(a.getX(), a.getY() + Alien.SIZE,
-                           "+10", 1f, 0.85f, 0.2f);
+                spawnPopup(a.getX(), a.getY() + Alien.SIZE, "+10", 1f, 0.85f, 0.2f);
                 continue;
             }
-
             if (!player.isInvincible() &&
                 overlaps(player.hitX(), player.hitY(),
                          player.hitW(), player.hitH(),
@@ -369,10 +369,9 @@ public class GameWorld {
                          g.hitX(), g.hitY(), g.hitW(), g.hitH())) {
                 g.collect();
                 score += 5;
+                gemCollectedThisFrame = true;
                 spawnSparkle(g.getX(), g.getY());
-                // Purple popup for gem
-                spawnPopup(g.getX(), g.getY() + Collectible.SIZE,
-                           "+5", 0.78f, 0.48f, 1f);
+                spawnPopup(g.getX(), g.getY() + Collectible.SIZE, "+5", 0.78f, 0.48f, 1f);
             }
         }
     }
@@ -393,27 +392,20 @@ public class GameWorld {
     }
 
     private void spawnDust(float x, float y) {
-        DustEffect d = new DustEffect();
-        d.play(x, y);
-        dust.add(d);
+        DustEffect d = new DustEffect(); d.play(x, y); dust.add(d);
     }
 
     private void spawnSparkle(float x, float y) {
-        SparkleEffect s = new SparkleEffect();
-        s.play(x, y);
-        sparkles.add(s);
+        SparkleEffect s = new SparkleEffect(); s.play(x, y); sparkles.add(s);
     }
 
     private void spawnPopup(float x, float y, String text,
                             float r, float g, float b) {
-        ScorePopup p = new ScorePopup();
-        p.play(x, y, text, r, g, b);
-        popups.add(p);
+        ScorePopup p = new ScorePopup(); p.play(x, y, text, r, g, b); popups.add(p);
     }
 
     private boolean overlaps(float ax, float ay, float aw, float ah,
                               float bx, float by, float bw, float bh) {
-        return ax < bx + bw && ax + aw > bx
-            && ay < by + bh && ay + ah > by;
+        return ax < bx + bw && ax + aw > bx && ay < by + bh && ay + ah > by;
     }
 }

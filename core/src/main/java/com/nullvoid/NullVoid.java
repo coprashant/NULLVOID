@@ -24,9 +24,10 @@ public class NullVoid extends ApplicationAdapter {
     public Viewport            viewport;
     public SpriteBatch         batch;
 
-    public GameWorld    world;
-    public GameUI       ui;
-    public InputHandler input;
+    public GameWorld     world;
+    public GameUI        ui;
+    public InputHandler  input;
+    public AudioManager  audio;
 
     private Preferences prefs;
 
@@ -44,11 +45,13 @@ public class NullVoid extends ApplicationAdapter {
         input = new InputHandler();
         world = new GameWorld();
         ui    = new GameUI(batch);
+        audio = new AudioManager();
 
         prefs = Gdx.app.getPreferences(PREFS_NAME);
 
         world.create();
         ui.create();
+        audio.create();
 
         world.setHighScore(prefs.getInteger(KEY_HIGH_SCORE, 0));
     }
@@ -61,8 +64,16 @@ public class NullVoid extends ApplicationAdapter {
 
         if (state == State.PLAYING) {
             world.update(delta, input);
+
+            // Jump SFX
+            if (world.playerJustJumped()) audio.playJump();
+
+            // Gem SFX
+            if (world.playerJustCollectedGem()) audio.playGem();
+
             if (world.isGameOver()) {
                 state = State.GAME_OVER;
+                audio.stopBGM();
                 saveHighScore();
             }
         }
@@ -75,7 +86,7 @@ public class NullVoid extends ApplicationAdapter {
         batch.setProjectionMatrix(camera.combined);
 
         world.render(batch);
-        ui.render(state, world, camera);
+        ui.render(state, world, camera, audio);
     }
 
     @Override
@@ -88,15 +99,12 @@ public class NullVoid extends ApplicationAdapter {
         batch.dispose();
         world.dispose();
         ui.dispose();
+        audio.dispose();
     }
 
     // Input
 
     private void handleInput() {
-        // ui.render() must run first each frame so wasPauseButtonPressed()
-        // reflects the current frame's touch — render() calls ui.render() after
-        // handleInput(), so button presses land on the NEXT frame (one frame lag
-        // is imperceptible at 60fps and avoids ordering issues).
         boolean pauseBtn = ui.wasPauseButtonPressed();
 
         switch (state) {
@@ -107,16 +115,23 @@ public class NullVoid extends ApplicationAdapter {
                     world.setHighScore(savedBest);
                     ui.hudHintTimer = 3.5f;
                     state = State.PLAYING;
+                    audio.playBGM();
                 }
                 break;
 
             case PLAYING:
-                if (input.isPause() || pauseBtn) state = State.PAUSED;
+                if (input.isPause() || pauseBtn) {
+                    state = State.PAUSED;
+                    audio.pauseBGM();
+                }
                 break;
 
             case PAUSED:
-                if (input.isPause() || input.isStart() || pauseBtn)
+                if (ui.wasMuteToggled()) audio.toggleMute();
+                if (input.isPause() || input.isStart() || pauseBtn) {
                     state = State.PLAYING;
+                    audio.resumeBGM();
+                }
                 break;
 
             case GAME_OVER:

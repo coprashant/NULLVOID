@@ -45,20 +45,23 @@ public class GameUI {
     private static final float ICON_W = 16f;
     private static final float ICON_H = 16f;
 
-    // Pause button — sits after the life icons
-    private static final float BTN_W    = 14f;
-    private static final float BTN_H    = 14f;
-    private static final float BTN_PAD  = 6f;   // gap from last life icon
-    // X is calculated at runtime after the lives row; stored for hit-testing
+    // Pause button in HUD
+    private static final float BTN_W   = 14f;
+    private static final float BTN_H   = 14f;
+    private static final float BTN_PAD = 6f;
     private float pauseBtnX = 0f;
     private float pauseBtnY = 0f;
 
-    // Viewport reference for unprojecting touch coords
-    private OrthographicCamera lastCam;
-    private final Vector3 touchVec = new Vector3();
+    // Mute button in pause screen — sized larger for easy clicking
+    private static final float MUTE_W = 60f;
+    private static final float MUTE_H = 16f;
+    private float muteBtnX = 0f;
+    private float muteBtnY = 0f;
 
-    // Flag read by NullVoid each frame
-    private boolean pauseButtonPressed = false;
+    private OrthographicCamera    lastCam  = null;
+    private final Vector3         touchVec = new Vector3();
+    private boolean pauseButtonPressed     = false;
+    private boolean muteToggled            = false;
 
     private final SpriteBatch batch;
     private BitmapFont        fontSm, fontMd, fontLg, fontPopup;
@@ -107,17 +110,19 @@ public class GameUI {
         }
     }
 
-    // Pause button query — consumed once per frame by NullVoid
+    // Button queries — consumed once per frame
 
     public boolean wasPauseButtonPressed() {
-        boolean v = pauseButtonPressed;
-        pauseButtonPressed = false;
-        return v;
+        boolean v = pauseButtonPressed; pauseButtonPressed = false; return v;
+    }
+
+    public boolean wasMuteToggled() {
+        boolean v = muteToggled; muteToggled = false; return v;
     }
 
     // Update
 
-    private void update(float delta) {
+    private void update(float delta, NullVoid.State state, boolean muted) {
         time += delta;
         blinkTimer += delta;
         if (blinkTimer >= 0.55f) { blinkTimer = 0f; blinkOn = !blinkOn; }
@@ -139,31 +144,42 @@ public class GameUI {
             starAlpha[i]  = MathUtils.clamp(starAlpha[i], 0.08f, 1.0f);
         }
 
-        // Check touch/click against pause button bounds
-        if (lastCam != null && Gdx.input.justTouched()) {
-            touchVec.set(Gdx.input.getX(), Gdx.input.getY(), 0);
-            lastCam.unproject(touchVec);
+        if (lastCam == null || !Gdx.input.justTouched()) return;
+
+        touchVec.set(Gdx.input.getX(), Gdx.input.getY(), 0);
+        lastCam.unproject(touchVec);
+
+        // Pause button — only active during gameplay
+        if (state == NullVoid.State.PLAYING) {
             if (touchVec.x >= pauseBtnX && touchVec.x <= pauseBtnX + BTN_W
              && touchVec.y >= pauseBtnY && touchVec.y <= pauseBtnY + BTN_H) {
                 pauseButtonPressed = true;
             }
         }
+
+        // Mute button — only active on pause screen
+        if (state == NullVoid.State.PAUSED) {
+            if (touchVec.x >= muteBtnX && touchVec.x <= muteBtnX + MUTE_W
+             && touchVec.y >= muteBtnY && touchVec.y <= muteBtnY + MUTE_H) {
+                muteToggled = true;
+            }
+        }
     }
 
-    // Public render
+    // Public render — now receives AudioManager for mute state display
 
     public void render(NullVoid.State state, GameWorld world,
-                       OrthographicCamera cam) {
+                       OrthographicCamera cam, AudioManager audio) {
         shapes.setProjectionMatrix(cam.combined);
         batch.setProjectionMatrix(cam.combined);
         lastCam = cam;
-        update(Gdx.graphics.getDeltaTime());
+        update(Gdx.graphics.getDeltaTime(), state, audio.isMuted());
 
         switch (state) {
-            case MENU:      drawMenu(world);     break;
-            case PLAYING:   drawHUD(world);      break;
-            case PAUSED:    drawPaused(world);   break;
-            case GAME_OVER: drawGameOver(world); break;
+            case MENU:      drawMenu(world);                  break;
+            case PLAYING:   drawHUD(world);                   break;
+            case PAUSED:    drawPaused(world, audio.isMuted()); break;
+            case GAME_OVER: drawGameOver(world);              break;
         }
     }
 
@@ -298,8 +314,7 @@ public class GameUI {
     // HUD
 
     private void drawHUD(GameWorld world) {
-        if (hudHintTimer > 0f)
-            hudHintTimer -= Gdx.graphics.getDeltaTime();
+        if (hudHintTimer > 0f) hudHintTimer -= Gdx.graphics.getDeltaTime();
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.18f);
@@ -320,29 +335,25 @@ public class GameUI {
         }
         batch.setColor(1f, 1f, 1f, 1f);
 
-        // Pause button — two small vertical bars drawn after the lives
+        // Pause button
         float livesEndX = 5f + Player.MAX_LIVES * (ICON_W + 3f) + BTN_PAD;
         pauseBtnX = livesEndX;
         pauseBtnY = iconY + (ICON_H - BTN_H) / 2f;
         batch.end();
 
-        // Draw button background and bars with ShapeRenderer
         shapes.begin(ShapeRenderer.ShapeType.Filled);
-        // Subtle dark background
         shapes.setColor(0.1f, 0.1f, 0.18f, 0.7f);
         shapes.rect(pauseBtnX, pauseBtnY, BTN_W, BTN_H);
-        // Cyan border
         shapes.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.5f);
-        shapes.rect(pauseBtnX,             pauseBtnY, BTN_W, 1f);
-        shapes.rect(pauseBtnX,             pauseBtnY + BTN_H - 1f, BTN_W, 1f);
-        shapes.rect(pauseBtnX,             pauseBtnY, 1f, BTN_H);
-        shapes.rect(pauseBtnX + BTN_W - 1f, pauseBtnY, 1f, BTN_H);
-        // The || bars
+        shapes.rect(pauseBtnX,              pauseBtnY,           BTN_W, 1f);
+        shapes.rect(pauseBtnX,              pauseBtnY + BTN_H - 1f, BTN_W, 1f);
+        shapes.rect(pauseBtnX,              pauseBtnY,           1f, BTN_H);
+        shapes.rect(pauseBtnX + BTN_W - 1f, pauseBtnY,           1f, BTN_H);
         float barW = 2f, barH = BTN_H * 0.55f;
         float barY = pauseBtnY + (BTN_H - barH) / 2f;
         shapes.setColor(1f, 1f, 1f, 0.9f);
-        shapes.rect(pauseBtnX + 3f,       barY, barW, barH);
-        shapes.rect(pauseBtnX + BTN_W - 5f, barY, barW, barH);
+        shapes.rect(pauseBtnX + 3f,            barY, barW, barH);
+        shapes.rect(pauseBtnX + BTN_W - 5f,    barY, barW, barH);
         shapes.end();
 
         batch.begin();
@@ -364,7 +375,7 @@ public class GameUI {
         int   score  = world.getScore();
         float scoreW = PixelFont.ICON_SIZE + 2f + PixelFont.DW
                      + PixelFont.measureInt(score) + 4f;
-        float rx     = W - scoreW - 5f;
+        float rx = W - scoreW - 5f;
         rx = PixelFont.drawGemIcon(batch, rx, numY);
         rx = PixelFont.drawTimes(batch, rx, numY);
         rx += 2f;
@@ -375,8 +386,7 @@ public class GameUI {
             if (!p.isActive()) continue;
             fontPopup.setColor(p.r, p.g, p.b, p.getAlpha());
             layout.setText(fontPopup, p.getText());
-            fontPopup.draw(batch, p.getText(),
-                           p.getX() - layout.width / 2f, p.getY());
+            fontPopup.draw(batch, p.getText(), p.getX() - layout.width / 2f, p.getY());
         }
         fontPopup.setColor(1f, 1f, 1f, 1f);
 
@@ -394,9 +404,9 @@ public class GameUI {
 
     // PAUSE
 
-    private void drawPaused(GameWorld world) {
+    private void drawPaused(GameWorld world, boolean muted) {
         drawOverlay(0.60f);
-        float bw = 220f, bh = 130f, by = (H - bh) / 2f;
+        float bw = 220f, bh = 145f, by = (H - bh) / 2f;
         drawMenuChrome(bw, bh, by);
 
         batch.begin();
@@ -413,9 +423,37 @@ public class GameUI {
         fontSm.setColor(COL_PURPLE.r, COL_PURPLE.g, COL_PURPLE.b, 0.9f);
         drawCenteredAt(fontSm, "LIVES: " + world.getLives() + " / " + Player.MAX_LIVES,
                        bx, titleY - 70f);
+
+        // Mute button
+        String muteLabel = muted ? "[ SOUND: OFF ]" : "[ SOUND: ON  ]";
+        layout.setText(fontSm, muteLabel);
+        muteBtnX = bx - layout.width / 2f - 4f;
+        muteBtnY = by + 26f;
+        batch.end();
+
+        shapes.begin(ShapeRenderer.ShapeType.Filled);
+        shapes.setColor(muted ? 0.3f : 0.05f,
+                        muted ? 0.05f : 0.25f,
+                        muted ? 0.05f : 0.35f, 0.85f);
+        shapes.rect(muteBtnX, muteBtnY, layout.width + 8f, MUTE_H);
+        shapes.setColor(muted ? COL_RED.r : COL_CYAN.r,
+                        muted ? COL_RED.g : COL_CYAN.g,
+                        muted ? COL_RED.b : COL_CYAN.b, 0.6f);
+        shapes.rect(muteBtnX,                      muteBtnY,          layout.width + 8f, 1f);
+        shapes.rect(muteBtnX,                      muteBtnY + MUTE_H, layout.width + 8f, 1f);
+        shapes.rect(muteBtnX,                      muteBtnY,          1f, MUTE_H);
+        shapes.rect(muteBtnX + layout.width + 7f,  muteBtnY,          1f, MUTE_H);
+        shapes.end();
+
+        batch.begin();
+        fontSm.setColor(muted ? COL_RED.r : COL_CYAN.r,
+                        muted ? COL_RED.g : COL_CYAN.g,
+                        muted ? COL_RED.b : COL_CYAN.b, 1f);
+        fontSm.draw(batch, muteLabel, muteBtnX + 4f, muteBtnY + MUTE_H - 3f);
+
         if (blinkOn) {
             fontSm.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, 1f);
-            drawCenteredAt(fontSm, "[ PRESS SPACE TO RESUME ]", bx, by + 15f);
+            drawCenteredAt(fontSm, "[ PRESS SPACE TO RESUME ]", bx, by + 12f);
         }
         batch.end();
     }
