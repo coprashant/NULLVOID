@@ -5,11 +5,6 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 
-/**
- * DustEffect — plays once at a given position then disappears.
- * Used for landing, stomping aliens, collecting diamonds.
- * Dust.png = 256x32 → 8 frames of 32x32.
- */
 public class DustEffect {
 
     private static Texture                  sheet;

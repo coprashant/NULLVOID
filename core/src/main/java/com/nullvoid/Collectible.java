@@ -8,11 +8,8 @@ public class Collectible {
 
     public static final float SIZE = 25f;
 
-    // Natural height — mid-player so it looks right to collect
     public static final float GEM_Y_GROUND = Player.GROUND_Y + Player.SIZE * 0.45f;
-    // Raised height when a rock is underneath
     public static final float GEM_Y_ROCK   = Player.GROUND_Y + Rock.SIZE + 10f;
-    // How close a rock must be (horizontally) to push the gem up
     public static final float ROCK_RADIUS  = 28f;
 
     private static Texture texture;

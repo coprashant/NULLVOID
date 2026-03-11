@@ -204,11 +204,6 @@ public class Alien {
         stateTime    = 0f;
     }
 
-    /**
-     * Returns the nearest rock that this alien is about to collide with,
-     * or null if none. Uses a wider look-ahead window that scales with
-     * world speed so fast-scrolling rocks are never missed.
-     */
     private Rock nearestApproachingRock(
             com.badlogic.gdx.utils.Array<Rock> rocks, float worldSpeed) {
 

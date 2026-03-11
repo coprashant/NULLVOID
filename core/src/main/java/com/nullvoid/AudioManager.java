@@ -5,7 +5,7 @@ import com.badlogic.gdx.Preferences;
 import com.badlogic.gdx.audio.Music;
 import com.badlogic.gdx.audio.Sound;
 
-// Owns all audio. Single class keeps it simple.
+// Owns all audio
 public class AudioManager {
 
     private static final String PREFS_NAME = "nullvoid.prefs";

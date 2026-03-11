@@ -40,7 +40,6 @@ public class Background {
     }
 
     public void update(float delta, float speed) {
-        // Accumulate raw — no modulo here, applied per tile in draw
         offsetFar  += speed * 0.25f * delta;
         offsetMid  += speed * 0.55f * delta;
         offsetNear += speed * 1.00f * delta;
@@ -55,13 +54,13 @@ public class Background {
 
     public void render(SpriteBatch batch) {
 
-        // 1. Far background fill
+        // Far background fill
         batch.setColor(0.25f, 0.25f, 0.35f, 1f);
         drawTileRect(batch, bgTile, offsetFar,
                      0, W, GROUND_TOP, H);
         batch.setColor(1f, 1f, 1f, 1f);
 
-        // 2. Mid cave wall details
+        // Mid cave wall details
         batch.setColor(0.55f, 0.55f, 0.65f, 1f);
         drawTileRect(batch, midTile, offsetMid,
                      0, W,
@@ -69,27 +68,27 @@ public class Background {
                      GROUND_TOP + H * 0.35f + TILE * 3);
         batch.setColor(1f, 1f, 1f, 1f);
 
-        // 3. Solid ground block (Y=0 to GROUND_Y)
+        // Solid ground block (Y=0 to GROUND_Y)
         batch.setColor(0.6f, 0.55f, 0.5f, 1f);
         drawTileRect(batch, groundFillTile, offsetNear,
                      0, W, 0, GROUND_TOP);
         batch.setColor(1f, 1f, 1f, 1f);
 
-        // 4. Floor surface tiles
+        // Floor surface tiles
         drawTileStrip(batch, floorTile, offsetNear,
                       GROUND_TOP, TILE);
 
-        // 5. Ceiling strip
+        // Ceiling strip
         drawTileStrip(batch, ceilTile, offsetNear,
                       H - TILE, TILE);
 
-        // 6. Cyan ground glow
+        // Cyan ground glow
         batch.setColor(0.3f, 1f, 0.85f, 0.35f);
         drawTileStrip(batch, floorTile, offsetNear,
                       GROUND_TOP, 4f);
         batch.setColor(1f, 1f, 1f, 1f);
 
-        // 7. Glitch overlay
+        // Glitch overlay
         if (glitchAlpha > 0f) {
             batch.setColor(0.5f, 0f, 1f, glitchAlpha);
             batch.draw(bgTile, 0, 0, W, H);
