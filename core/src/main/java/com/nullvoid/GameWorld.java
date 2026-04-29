@@ -6,16 +6,20 @@ import java.util.Random;
 
 public class GameWorld {
 
-    private static final float WALK_SPEED  = 120f;
-    private static final float RUN_SPEED   = 220f;
-    private static final float INTRO_SPEED = 150f;
-    private static final float INTRO_DIST  = 10f;
-    private static final float SPEED_LERP  = 12f;
+    private static final float WALK_SPEED    = 120f;
+    private static final float RUN_SPEED     = 220f;
+    private static final float INTRO_SPEED   = 150f;
+    private static final float INTRO_DIST    = 10f;
+    private static final float SPEED_LERP    = 12f;
     private static final float MAX_SPEED_CAP = 420f;
 
     private static final float HIT_STUN_DURATION     = 0.4f;
     private static final float HIT_STUN_SPEED_FACTOR = 0.25f;
     private float hitStunTimer = 0f;
+
+    // Player cannot go further back than this many metres from peak distance
+    private static final float BACKWARD_LIMIT_METRES = 10f;
+    private float peakDistance = 0f;
 
     private boolean introActive   = true;
     private float   introScrolled = 0f;
@@ -29,11 +33,14 @@ public class GameWorld {
     private float   distance  = 0f;
     private boolean gameOver  = false;
 
-    private float alienTimer  = 0f;
-    private float rockTimer   = 0f;
-    private float ceilTimer   = 0f;
-    private float gemTimer    = 0f;
-    private float gemInterval = 3f;
+    // Top-5 leaderboard held in memory; NullVoid persists it via getScores()
+    public static final int LEADERBOARD_SIZE = 5;
+    private int[] scores = new int[LEADERBOARD_SIZE];
+
+    private float alienTimer = 0f;
+    private float rockTimer  = 0f;
+    private float ceilTimer  = 0f;
+    private float gemTimer   = 0f;
 
     private float lastSpawnTime = 0f;
     private float gameTime      = 0f;
@@ -49,13 +56,12 @@ public class GameWorld {
     private Array<Rock>          rocks    = new Array<>();
     private Array<CeilingGap>    ceilings = new Array<>();
     private Array<Collectible>   gems     = new Array<>();
+    private Array<GlassShard>    shards   = new Array<>();
     private Array<DustEffect>    dust     = new Array<>();
     private Array<SparkleEffect> sparkles = new Array<>();
     private Array<ScorePopup>    popups   = new Array<>();
 
     private Random rng = new Random();
-
-    // Lifecycle
 
     public void create() {
         Alien.loadAssets();
@@ -63,6 +69,7 @@ public class GameWorld {
         Collectible.loadAssets();
         DustEffect.loadAssets();
         SparkleEffect.loadAssets();
+        GlassShard.loadAssets();
 
         player     = new Player();
         background = new Background();
@@ -79,6 +86,7 @@ public class GameWorld {
         rocks.clear();
         ceilings.clear();
         gems.clear();
+        shards.clear();
         dust.clear();
         sparkles.clear();
         popups.clear();
@@ -92,6 +100,7 @@ public class GameWorld {
         introScrolled = 0f;
         score         = 0;
         distance      = 0f;
+        peakDistance  = 0f;
         gameOver      = false;
         alienTimer    = 0f;
         rockTimer     = 0f;
@@ -100,8 +109,6 @@ public class GameWorld {
         gameTime      = 0f;
         lastSpawnTime = 0f;
     }
-
-    // Update
 
     public void update(float delta, InputHandler input) {
         jumpedThisFrame       = false;
@@ -134,7 +141,6 @@ public class GameWorld {
         milestones.update(delta, (int) distance);
 
         if (milestones.justHitMilestone()) {
-            // Jolt speed forward on milestone hit
             targetSpeed = Math.min(targetSpeed + milestones.getSpeedBonus() * 0.3f,
                                    MAX_SPEED_CAP);
         }
@@ -162,8 +168,20 @@ public class GameWorld {
             effectiveSpeed = speed * HIT_STUN_SPEED_FACTOR;
         }
 
-        if (scrollDir > 0 && effectiveSpeed > 0)
+        if (scrollDir > 0 && effectiveSpeed > 0) {
             distance += effectiveSpeed * delta * 0.04f;
+            if (distance > peakDistance) peakDistance = distance;
+        } else if (scrollDir < 0 && effectiveSpeed > 0) {
+            float proposed = distance - effectiveSpeed * delta * 0.04f;
+            float minAllowed = peakDistance - BACKWARD_LIMIT_METRES;
+            if (proposed < minAllowed) {
+                // Distance is clamped but speed is left alone so input still feels live
+                distance     = Math.max(minAllowed, 0f);
+                effectiveSpeed = 0f;
+            } else {
+                distance = Math.max(proposed, 0f);
+            }
+        }
 
         background.update(delta, effectiveSpeed * scrollDir);
 
@@ -179,8 +197,6 @@ public class GameWorld {
             spawnDust(player.getX(), Player.GROUND_Y);
     }
 
-    // Render
-
     public void render(SpriteBatch batch) {
         batch.begin();
         background.render(batch);
@@ -188,6 +204,7 @@ public class GameWorld {
         for (Rock          r : rocks)    r.render(batch);
         for (CeilingGap    c : ceilings) c.render(batch);
         for (Alien         a : aliens)   a.render(batch);
+        for (GlassShard    s : shards)   s.render(batch);
         for (DustEffect    d : dust)     d.render(batch);
         for (SparkleEffect s : sparkles) s.render(batch);
         player.render(batch);
@@ -202,9 +219,8 @@ public class GameWorld {
         Collectible.disposeAssets();
         DustEffect.disposeAssets();
         SparkleEffect.disposeAssets();
+        GlassShard.disposeAssets();
     }
-
-    // Accessors
 
     public boolean           isGameOver()             { return gameOver;  }
     public int               getScore()               { return score;     }
@@ -219,7 +235,28 @@ public class GameWorld {
     public boolean           playerJustCollectedGem() { return gemCollectedThisFrame; }
     public MilestoneManager  getMilestones()          { return milestones; }
 
-    // Spawning — intervals driven by MilestoneManager
+    public int[] getScores() { return scores; }
+
+    public void setScores(int[] saved) {
+        for (int i = 0; i < LEADERBOARD_SIZE; i++)
+            scores[i] = (i < saved.length) ? saved[i] : 0;
+    }
+
+    // Inserts current score into the sorted leaderboard and returns its rank (1-based), or -1
+    public int submitScore(int s) {
+        int rank = -1;
+        for (int i = 0; i < LEADERBOARD_SIZE; i++) {
+            if (s > scores[i]) {
+                // Shift lower entries down
+                for (int j = LEADERBOARD_SIZE - 1; j > i; j--)
+                    scores[j] = scores[j - 1];
+                scores[i] = s;
+                rank = i + 1;
+                break;
+            }
+        }
+        return rank;
+    }
 
     private boolean canSpawnObstacle() {
         return (gameTime - lastSpawnTime) >= milestones.getSpawnSeparation();
@@ -263,6 +300,7 @@ public class GameWorld {
     private void spawnGems(float delta) {
         if (speed < 10f) return;
         gemTimer += delta;
+        float gemInterval = Math.max(1.5f, 3f - milestones.getTier() * 0.1f);
         if (gemTimer < gemInterval) return;
         gemTimer = 0f;
         float spawnX = NullVoid.W + 60f;
@@ -274,15 +312,20 @@ public class GameWorld {
             gems.add(new Collectible(spawnX + i * 40f));
     }
 
-    // Object updates
-
     private void updateObjects(float delta) {
         float worldVel = speed * scrollDir;
 
         for (int i = aliens.size - 1; i >= 0; i--) {
             Alien a = aliens.get(i);
-            a.update(delta, worldVel, rocks);
+            a.update(delta, worldVel, rocks, player.getX());
+            GlassShard shard = a.pollShard();
+            if (shard != null) shards.add(shard);
             if (a.isRemovable() || a.isOffScreen()) aliens.removeIndex(i);
+        }
+        for (int i = shards.size - 1; i >= 0; i--) {
+            GlassShard s = shards.get(i);
+            s.update(delta, worldVel);
+            if (s.isExpired()) shards.removeIndex(i);
         }
         for (int i = rocks.size - 1; i >= 0; i--) {
             Rock r = rocks.get(i);
@@ -315,8 +358,6 @@ public class GameWorld {
             if (!p.isActive()) popups.removeIndex(i);
         }
     }
-
-    // Collision
 
     private void checkCollisions() {
         for (Rock r : rocks) {
@@ -362,6 +403,18 @@ public class GameWorld {
             }
         }
 
+        for (GlassShard s : shards) {
+            if (!player.isInvincible() &&
+                overlaps(player.hitX(), player.hitY(),
+                         player.hitW(), player.hitH(),
+                         s.hitX(), s.hitY(), s.hitW(), s.hitH())) {
+                s.expire();
+                boolean died = player.hit();
+                spawnDust(player.getX(), player.getY());
+                if (died) triggerGameOver();
+            }
+        }
+
         for (Collectible g : gems) {
             if (g.isCollected()) continue;
             if (overlaps(player.hitX(), player.hitY(),
@@ -376,8 +429,6 @@ public class GameWorld {
         }
     }
 
-    // Helpers
-
     private void triggerHit() {
         boolean died = player.hit();
         spawnDust(player.getX(), player.getY() + Player.SIZE);
@@ -387,11 +438,10 @@ public class GameWorld {
 
     private void triggerGameOver() {
         gameOver = true;
-        int finalScore = score + getDistance();
-        if (finalScore > highScore) highScore = finalScore;
+        if (score > highScore) highScore = score;
     }
 
-    private void spawnDust(float x, float y)  {
+    private void spawnDust(float x, float y) {
         DustEffect d = new DustEffect(); d.play(x, y); dust.add(d);
     }
 

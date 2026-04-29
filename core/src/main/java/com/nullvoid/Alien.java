@@ -28,18 +28,22 @@ public class Alien {
     private static final float GRAVITY      = -700f;
     private static final float JUMP_FORCE   =  360f;
 
-    // How far ahead the alien scans for rocks (in pixels)
     private static final float LOOK_AHEAD_BASE  = SIZE * 1.2f;
-    // Extra look-ahead per unit of world speed to handle fast scroll
     private static final float LOOK_AHEAD_SPEED = 0.22f;
+
+    // Patrol ranged attack constants
+    private static final float SHOOT_RANGE    = 260f;
+    private static final float SHOOT_INTERVAL = 2.8f;
+    private float shootCooldown = 1.4f;
+
+    // Shard produced this frame, collected by GameWorld via pollShard()
+    private GlassShard pendingShard = null;
 
     private static Texture   runTex, idleTex, jumpTex, deathTex;
     private static Animation<TextureRegion> runAnim,   runAnimL,
                                             idleAnim,
                                             jumpAnim,  jumpAnimL,
                                             deathAnim;
-
-    // Asset loading
 
     public static void loadAssets() {
         runTex   = new Texture("Alien_run.png");
@@ -67,8 +71,6 @@ public class Alien {
         if (deathTex != null) deathTex.dispose();
     }
 
-    // Factories
-
     public static Alien createWalker(float spawnX) {
         Alien a = new Alien();
         a.type  = Type.WALKER;
@@ -89,34 +91,32 @@ public class Alien {
         return a;
     }
 
-    // Update
-
+    // Full update: used during normal gameplay so playerX drives the shoot check
     public void update(float delta, float worldSpeed,
-                       com.badlogic.gdx.utils.Array<Rock> rocks) {
-        stateTime += delta;
+                       com.badlogic.gdx.utils.Array<Rock> rocks,
+                       float playerX) {
+        stateTime   += delta;
+        pendingShard = null;
         if (jumpCooldown > 0f) jumpCooldown -= delta;
         if (dead) return;
 
-        // Scroll with world
         x -= worldSpeed * delta;
         if (type == Type.PATROL) {
             patrolLeft  -= worldSpeed * delta;
             patrolRight -= worldSpeed * delta;
         }
 
-        // Gravity
         if (!onGround) {
             velY += GRAVITY * delta;
             y    += velY * delta;
             if (y <= Player.GROUND_Y) {
-                y        = Player.GROUND_Y;
-                velY     = 0f;
-                onGround = true;
+                y         = Player.GROUND_Y;
+                velY      = 0f;
+                onGround  = true;
                 stateTime = 0f;
             }
         }
 
-        // Rock avoidance — only when on ground and cooldown is clear
         if (onGround && jumpCooldown <= 0f) {
             Rock nearest = nearestApproachingRock(rocks, worldSpeed);
             if (nearest != null) {
@@ -129,7 +129,6 @@ public class Alien {
                     if (rockInZone) {
                         jump();
                     } else {
-                        // Rock is outside patrol zone — reverse and wait
                         velX         = (velX > 0) ? -PATROL_SPEED : PATROL_SPEED;
                         jumpCooldown = 0.8f;
                     }
@@ -137,17 +136,40 @@ public class Alien {
             }
         }
 
-        // Horizontal movement
+        // Shoot only when grounded, player is to the left and within range
+        if (type == Type.PATROL && onGround) {
+            if (shootCooldown > 0f) {
+                shootCooldown -= delta;
+            } else {
+                float dist = x - playerX;
+                if (dist > 0f && dist < SHOOT_RANGE) {
+                    pendingShard  = new GlassShard(x - SIZE * 0.3f,
+                                                  y + SIZE * 0.55f);
+                    shootCooldown = SHOOT_INTERVAL;
+                }
+            }
+        }
+
         x += velX * delta;
 
-        // Patrol bounds — clamp and flip direction
         if (type == Type.PATROL) {
             if (x >= patrolRight) { x = patrolRight; velX = -PATROL_SPEED; }
             if (x <= patrolLeft)  { x = patrolLeft;  velX =  PATROL_SPEED; }
         }
     }
 
-    // Combat
+    // Overload without playerX for intro/legacy paths that do not need shooting
+    public void update(float delta, float worldSpeed,
+                       com.badlogic.gdx.utils.Array<Rock> rocks) {
+        update(delta, worldSpeed, rocks, -9999f);
+    }
+
+    // GameWorld calls this once per frame after update() to collect any fired shard
+    public GlassShard pollShard() {
+        GlassShard s = pendingShard;
+        pendingShard  = null;
+        return s;
+    }
 
     public void die() {
         dead      = true;
@@ -155,8 +177,6 @@ public class Alien {
         velX      = 0f;
         velY      = 0f;
     }
-
-    // Render
 
     public void render(SpriteBatch batch) {
         TextureRegion frame;
@@ -173,8 +193,6 @@ public class Alien {
 
         batch.draw(frame, x - SIZE / 2f, y, SIZE, SIZE);
     }
-
-    // Accessors
 
     public float   getX()        { return x; }
     public float   getY()        { return y; }
@@ -193,8 +211,6 @@ public class Alien {
     public float headY() { return y + SIZE * 0.65f; }
     public float headW() { return SIZE * 0.5f;       }
     public float headH() { return SIZE * 0.2f;       }
-
-    // Private helpers
 
     private void jump() {
         if (!onGround || jumpCooldown > 0f) return;
@@ -221,16 +237,13 @@ public class Alien {
             float   dist;
 
             if (velX < 0) {
-                // Moving left: front edge is left side of alien
                 float frontX = x - SIZE * 0.3f;
-                // Rock must be to our left and within look-ahead
                 approaching = rockRight > frontX - lookDist
                            && rockRight < frontX + SIZE * 0.3f;
                 dist = frontX - rockRight;
             } else {
-                // Moving right: front edge is right side of alien
                 float frontX = x + SIZE * 0.3f;
-                approaching = rockLeft > frontX - SIZE * 0.3f
+                approaching = rockLeft >= frontX
                            && rockLeft < frontX + lookDist;
                 dist = rockLeft - frontX;
             }
@@ -243,8 +256,6 @@ public class Alien {
 
         return best;
     }
-
-    // Animation builders
 
     private static Animation<TextureRegion> buildAnim(
             Texture tex, int fw, int fh, int count,

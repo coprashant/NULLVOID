@@ -39,4 +39,10 @@ public class InputHandler {
         return Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)
             || Gdx.input.isKeyJustPressed(Input.Keys.P);
     }
+
+    // Used to exit the leaderboard screen
+    public boolean isBack() {
+        return Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)
+            || Gdx.input.isKeyJustPressed(Input.Keys.BACKSPACE);
+    }
 }

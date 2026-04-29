@@ -45,7 +45,7 @@ public class GameUI {
     private static final float ICON_W = 16f;
     private static final float ICON_H = 16f;
 
-    // Pause button — far top-left corner
+    // Pause button top-left
     private static final float BTN_X   = 3f;
     private static final float BTN_W   = 14f;
     private static final float BTN_H   = 14f;
@@ -58,10 +58,18 @@ public class GameUI {
     private float muteBtnX = 0f;
     private float muteBtnY = 0f;
 
+    // Leaderboard button on menu and game-over screens
+    private static final float LB_BTN_W = 90f;
+    private static final float LB_BTN_H = 16f;
+    private float lbBtnX = 0f;
+    private float lbBtnY = 0f;
+    private boolean lbBtnVisible = false;
+
     private OrthographicCamera    lastCam  = null;
     private final Vector3         touchVec = new Vector3();
-    private boolean pauseButtonPressed     = false;
-    private boolean muteToggled            = false;
+    private boolean pauseButtonPressed       = false;
+    private boolean muteToggled              = false;
+    private boolean leaderboardButtonPressed = false;
 
     private final SpriteBatch batch;
     private BitmapFont        fontSm, fontMd, fontLg, fontPopup, fontBanner;
@@ -72,8 +80,6 @@ public class GameUI {
     private TextureRegion lifeIcon;
 
     public GameUI(SpriteBatch batch) { this.batch = batch; }
-
-    // Lifecycle
 
     public void create() {
         fontSm     = new BitmapFont(); fontSm.getData().setScale(0.72f);
@@ -111,8 +117,6 @@ public class GameUI {
         }
     }
 
-    // Button queries
-
     public boolean wasPauseButtonPressed() {
         boolean v = pauseButtonPressed; pauseButtonPressed = false; return v;
     }
@@ -121,7 +125,9 @@ public class GameUI {
         boolean v = muteToggled; muteToggled = false; return v;
     }
 
-    // Update
+    public boolean wasLeaderboardButtonPressed() {
+        boolean v = leaderboardButtonPressed; leaderboardButtonPressed = false; return v;
+    }
 
     private void update(float delta, NullVoid.State state, boolean muted) {
         time += delta;
@@ -163,9 +169,15 @@ public class GameUI {
                 muteToggled = true;
             }
         }
-    }
 
-    // Public render
+        if (lbBtnVisible
+         && (state == NullVoid.State.MENU || state == NullVoid.State.GAME_OVER)) {
+            if (touchVec.x >= lbBtnX && touchVec.x <= lbBtnX + LB_BTN_W
+             && touchVec.y >= lbBtnY && touchVec.y <= lbBtnY + LB_BTN_H) {
+                leaderboardButtonPressed = true;
+            }
+        }
+    }
 
     public void render(NullVoid.State state, GameWorld world,
                        OrthographicCamera cam, AudioManager audio) {
@@ -175,16 +187,18 @@ public class GameUI {
         update(Gdx.graphics.getDeltaTime(), state, audio.isMuted());
 
         switch (state) {
-            case MENU:      drawMenu(world);                    break;
-            case PLAYING:   drawHUD(world);                     break;
-            case PAUSED:    drawPaused(world, audio.isMuted()); break;
-            case GAME_OVER: drawGameOver(world);                break;
+            case MENU:        drawMenu(world);                    break;
+            case PLAYING:     drawHUD(world);                     break;
+            case PAUSED:      drawPaused(world, audio.isMuted()); break;
+            case GAME_OVER:   drawGameOver(world);                break;
+            case LEADERBOARD: drawLeaderboard(world);             break;
         }
     }
 
     // MENU
 
     private void drawMenu(GameWorld world) {
+        lbBtnVisible = true;
         drawSpaceBackground();
         drawStarfield();
         drawScanlines();
@@ -304,6 +318,14 @@ public class GameUI {
         fontSm.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 0.6f);
         drawCentered(fontSm, "BEST: " + world.getHighScore() + " m", 65f);
 
+        // Leaderboard button
+        String lbLabel = "[ LEADERBOARD ]";
+        layout.setText(fontSm, lbLabel);
+        lbBtnX = W - layout.width - 8f;
+        lbBtnY = 22f;
+        fontSm.setColor(COL_PURPLE.r, COL_PURPLE.g, COL_PURPLE.b, 0.9f);
+        fontSm.draw(batch, lbLabel, lbBtnX, lbBtnY + LB_BTN_H - 2f);
+
         if (blinkOn) {
             fontMd.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, 1f);
             drawCentered(fontMd, "PRESS SPACE TO START", 35f);
@@ -313,6 +335,7 @@ public class GameUI {
     // HUD
 
     private void drawHUD(GameWorld world) {
+        lbBtnVisible = false;
         if (hudHintTimer > 0f) hudHintTimer -= Gdx.graphics.getDeltaTime();
 
         shapes.begin(ShapeRenderer.ShapeType.Filled);
@@ -324,7 +347,6 @@ public class GameUI {
         float numY  = HUD_Y + (HUD_H - PixelFont.DH) / 2f;
         pauseBtnY   = HUD_Y + (HUD_H - BTN_H) / 2f;
 
-        // Pause button — far left corner
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         shapes.setColor(0.1f, 0.1f, 0.18f, 0.7f);
         shapes.rect(BTN_X, pauseBtnY, BTN_W, BTN_H);
@@ -342,7 +364,6 @@ public class GameUI {
 
         batch.begin();
 
-        // Lives — right of pause button
         float livesStartX = BTN_X + BTN_W + BTN_PAD;
         for (int i = 0; i < Player.MAX_LIVES; i++) {
             boolean alive = i < world.getLives();
@@ -352,7 +373,6 @@ public class GameUI {
         }
         batch.setColor(1f, 1f, 1f, 1f);
 
-        // Centre — distance
         int   dist  = world.getDistance();
         float distW = PixelFont.measureInt(dist) + PixelFont.DW * 2f + 6f;
         float cx    = (W - distW) / 2f;
@@ -365,7 +385,6 @@ public class GameUI {
         fontMd.draw(batch, "m", cx, numY + PixelFont.DH - 1f);
         batch.setColor(1f, 1f, 1f, 1f);
 
-        // Right — gem icon x score
         int   score  = world.getScore();
         float scoreW = PixelFont.ICON_SIZE + 2f + PixelFont.DW
                      + PixelFont.measureInt(score) + 4f;
@@ -375,7 +394,6 @@ public class GameUI {
         rx += 2f;
         PixelFont.drawInt(batch, score, rx, numY);
 
-        // Popups
         for (ScorePopup p : world.getPopups()) {
             if (!p.isActive()) continue;
             fontPopup.setColor(p.r, p.g, p.b, p.getAlpha());
@@ -384,7 +402,6 @@ public class GameUI {
         }
         fontPopup.setColor(1f, 1f, 1f, 1f);
 
-        // Pause hint
         if (hudHintTimer > 0f) {
             float alpha = MathUtils.clamp(hudHintTimer / 1.5f, 0f, 0.55f);
             fontSm.setColor(0.5f, 0.5f, 0.6f, alpha);
@@ -395,7 +412,6 @@ public class GameUI {
 
         batch.end();
 
-        // Milestone banner — drawn on top of everything
         drawMilestoneBanner(world.getMilestones());
     }
 
@@ -406,13 +422,11 @@ public class GameUI {
 
         float progress = ms.getBannerTimer() / ms.getBannerMax();
 
-        // Fade in first 15%, hold, fade out last 25%
         float alpha;
         if (progress > 0.85f)      alpha = (1f - progress) / 0.15f;
         else if (progress < 0.25f) alpha = progress / 0.25f;
         else                       alpha = 1f;
 
-        // Slight scale pulse on entry
         float scale = 1f + MathUtils.clamp((progress - 0.85f) / 0.15f, 0f, 1f) * 0.15f;
 
         String text = ms.getBannerText();
@@ -422,23 +436,19 @@ public class GameUI {
         float bx = (W - tw) / 2f;
         float by = H / 2f - th / 2f + 10f;
 
-        // Dark backing strip
         shapes.begin(ShapeRenderer.ShapeType.Filled);
         float pad = 12f;
         shapes.setColor(0f, 0f, 0f, alpha * 0.55f);
         shapes.rect(bx - pad, by - pad * 0.5f, tw + pad * 2f, th + pad);
-        // Gold top/bottom border lines
         shapes.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, alpha * 0.8f);
         shapes.rect(bx - pad, by + th + pad * 0.5f, tw + pad * 2f, 1.5f);
         shapes.rect(bx - pad, by - pad * 0.5f,      tw + pad * 2f, 1.5f);
         shapes.end();
 
         batch.begin();
-        // Gold glow pass
         fontBanner.getData().setScale(2.0f * scale);
         fontBanner.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, alpha * 0.35f);
         fontBanner.draw(batch, text, bx + 1f, by + th - 1f);
-        // Main white text
         fontBanner.setColor(1f, 1f, 1f, alpha);
         fontBanner.draw(batch, text, bx, by + th);
         fontBanner.getData().setScale(2.0f);
@@ -448,6 +458,7 @@ public class GameUI {
     // PAUSE
 
     private void drawPaused(GameWorld world, boolean muted) {
+        lbBtnVisible = false;
         drawOverlay(0.60f);
         float bw = 220f, bh = 145f, by = (H - bh) / 2f;
         drawMenuChrome(bw, bh, by);
@@ -467,7 +478,6 @@ public class GameUI {
         drawCenteredAt(fontSm, "LIVES: " + world.getLives() + " / " + Player.MAX_LIVES,
                        bx, titleY - 70f);
 
-        // Mute button
         String muteLabel = muted ? "[ SOUND: OFF ]" : "[ SOUND: ON  ]";
         layout.setText(fontSm, muteLabel);
         muteBtnX = bx - layout.width / 2f - 4f;
@@ -504,6 +514,7 @@ public class GameUI {
     // GAME OVER
 
     private void drawGameOver(GameWorld world) {
+        lbBtnVisible = true;
         drawSpaceBackground();
         drawStarfield();
         drawScanlines();
@@ -525,10 +536,82 @@ public class GameUI {
         drawCenteredAt(fontMd, "DISTANCE: " + world.getDistance() + "m", bx, by + 60f);
         fontMd.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 1f);
         drawCenteredAt(fontMd, "PERSONAL BEST: " + world.getHighScore(), bx, by + 40f);
+
+        // Leaderboard button
+        String lbLabel = "[ LEADERBOARD ]";
+        layout.setText(fontSm, lbLabel);
+        lbBtnX = bx - layout.width / 2f;
+        lbBtnY = by + 22f;
+        fontSm.setColor(COL_PURPLE.r, COL_PURPLE.g, COL_PURPLE.b, 0.9f);
+        fontSm.draw(batch, lbLabel, lbBtnX, lbBtnY + LB_BTN_H - 2f);
+
         if (blinkOn) {
             fontMd.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, 1f);
             drawCenteredAt(fontMd, "PRESS SPACE TO RESTART", bx, 40f);
         }
+        batch.end();
+    }
+
+    // LEADERBOARD
+
+    private void drawLeaderboard(GameWorld world) {
+        lbBtnVisible = false;
+        drawSpaceBackground();
+        drawStarfield();
+        drawScanlines();
+
+        // Chrome box sized to hold exactly the title + 5 rows with comfortable padding
+        float bw = 260f, bh = 162f, by = 58f;
+        drawMenuChrome(bw, bh, by);
+
+        batch.begin();
+        float cx = W / 2f + glitchX;
+
+        // Title sits just inside the top of the box
+        fontMd.setColor(COL_CYAN.r, COL_CYAN.g, COL_CYAN.b, 1f);
+        drawCenteredAt(fontMd, "TOP SCORES", cx, by + bh - 16f);
+
+        fontSm.setColor(COL_DIM.r, COL_DIM.g, COL_DIM.b, 0.7f);
+        drawCenteredAt(fontSm, "--------------------", cx, by + bh - 30f);
+
+        int[]    sc      = world.getScores();
+        float    rowStep = 22f;
+        // First row starts just below the separator
+        float    rowTop  = by + bh - 48f;
+        String[] medals  = {"#1", "#2", "#3", "#4", "#5"};
+
+        for (int i = 0; i < GameWorld.LEADERBOARD_SIZE; i++) {
+            float rowY  = rowTop - i * rowStep;
+            boolean top = (i == 0 && sc[i] > 0);
+
+            if (top) {
+                fontSm.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, 1f);
+            } else {
+                fontSm.setColor(COL_DIM.r, COL_DIM.g, COL_DIM.b, sc[i] > 0 ? 0.9f : 0.4f);
+            }
+            fontSm.draw(batch, medals[i], cx - 90f, rowY);
+
+            if (sc[i] > 0) {
+                if (top) {
+                    fontMd.setColor(COL_GOLD.r, COL_GOLD.g, COL_GOLD.b, 1f);
+                } else {
+                    fontMd.setColor(1f, 1f, 1f, 0.85f);
+                }
+                String val = Integer.toString(sc[i]);
+                layout.setText(fontMd, val);
+                fontMd.draw(batch, val, cx + 90f - layout.width, rowY);
+            } else {
+                fontSm.setColor(COL_DIM.r, COL_DIM.g, COL_DIM.b, 0.3f);
+                String val = "---";
+                layout.setText(fontSm, val);
+                fontSm.draw(batch, val, cx + 90f - layout.width, rowY);
+            }
+        }
+
+        // Hint sits below the chrome box with a clear gap
+        fontSm.setColor(COL_DIM.r, COL_DIM.g, COL_DIM.b, 0.6f);
+        drawCenteredAt(fontSm, "ESC  or  BACKSPACE  to return", cx, by - 18f);
+
         batch.end();
     }
 

@@ -32,6 +32,8 @@ public class Player {
     private boolean jumping         = false;
     private boolean dead            = false;
     private boolean facingLeft      = false;
+    // BUG 2 FIX: landedThisFrame is now a sticky flag consumed exactly once per frame
+    // It is set in update and cleared only by justLanded(), not by multiple reads
     private boolean landedThisFrame = false;
 
     private float invincibleTimer = 0f;
@@ -50,8 +52,6 @@ public class Player {
                                      idleAnim, idleAnimL,
                                      jumpAnim, jumpAnimL,
                                      deathAnim;
-
-    // ── Lifecycle ──────────────────────────────────────────────
 
     public void create() {
         runTex   = new Texture("Astronaut_Run.png");
@@ -92,8 +92,6 @@ public class Player {
         coyoteTimer     = 0f;
     }
 
-    // ── Intro ──────────────────────────────────────────────────
-
     public boolean updateIntro(float delta) {
         stateTime += delta;
 
@@ -114,11 +112,9 @@ public class Player {
         return true;
     }
 
-    // ── Update ─────────────────────────────────────────────────
-
     public void update(float delta, InputHandler input) {
         stateTime       += delta;
-        landedThisFrame  = false;
+        // BUG 2 FIX: do not reset landedThisFrame here; only justLanded() clears it
         if (invincibleTimer > 0f) invincibleTimer -= delta;
         if (dead) return;
 
@@ -126,7 +122,6 @@ public class Player {
         boolean right = input.isRight();
         boolean shift = input.isShift();
 
-        // Direction and move state
         if (left && !right) {
             moveState  = shift ? MoveState.RUN_LEFT : MoveState.WALK_LEFT;
             facingLeft = true;
@@ -137,7 +132,6 @@ public class Player {
             moveState = MoveState.IDLE;
         }
 
-        // Animation — jump takes priority while airborne
         if (!jumping) {
             animState = (moveState == MoveState.IDLE)
                         ? AnimState.IDLE : AnimState.RUN;
@@ -149,16 +143,14 @@ public class Player {
             coyoteTimer -= delta;
         }
 
-        // Jump — allowed while grounded OR within the coyote window
         if (input.isJump() && coyoteTimer > 0f) {
             velY        = JUMP_FORCE;
             jumping     = true;
-            coyoteTimer = 0f;   // consume window so it can't be used twice
+            coyoteTimer = 0f;
             animState   = AnimState.JUMP;
             stateTime   = 0f;
         }
 
-        // Gravity + landing
         if (jumping) {
             velY += GRAVITY * delta;
             y    += velY * delta;
@@ -166,6 +158,7 @@ public class Player {
                 y               = GROUND_Y;
                 velY            = 0f;
                 jumping         = false;
+                // BUG 2 FIX: set flag here once; cleared only when caller reads it
                 landedThisFrame = true;
                 animState       = (moveState == MoveState.IDLE)
                                   ? AnimState.IDLE : AnimState.RUN;
@@ -173,8 +166,6 @@ public class Player {
             }
         }
     }
-
-    // ── Hit / death ────────────────────────────────────────────
 
     public boolean hit() {
         if (invincibleTimer > 0f) return false;
@@ -188,8 +179,6 @@ public class Player {
         }
         return false;
     }
-
-    // ── Render ─────────────────────────────────────────────────
 
     public void render(SpriteBatch batch) {
         if (invincibleTimer > 0f) {
@@ -210,8 +199,6 @@ public class Player {
         deathTex.dispose();
     }
 
-    // ── Accessors ──────────────────────────────────────────────
-
     public float     getX()          { return FIXED_X; }
     public float     getY()          { return y; }
     public int       getLives()      { return lives; }
@@ -221,13 +208,13 @@ public class Player {
     public MoveState getMoveState()  { return moveState; }
     public boolean   isIntroMoving() { return introMoving; }
 
+    // BUG 2 FIX: flag is now consumed exactly once and cleared atomically
     public boolean justLanded() {
-        boolean l = landedThisFrame;
+        if (!landedThisFrame) return false;
         landedThisFrame = false;
-        return l;
+        return true;
     }
 
-    // Hitboxes
     public float hitX()   { return FIXED_X - SIZE * 0.28f; }
     public float hitY()   { return y; }
     public float hitW()   { return SIZE * 0.56f; }
@@ -237,8 +224,6 @@ public class Player {
     public float stompY() { return y; }
     public float stompW() { return SIZE * 0.5f; }
     public float stompH() { return 10f; }
-
-    // ── Animation helpers ──────────────────────────────────────
 
     private TextureRegion currentFrame() {
         switch (animState) {

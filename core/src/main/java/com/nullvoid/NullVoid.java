@@ -16,8 +16,10 @@ public class NullVoid extends ApplicationAdapter {
 
     private static final String PREFS_NAME     = "nullvoid.prefs";
     private static final String KEY_HIGH_SCORE = "highScore";
+    // Scores stored as individual keys: score_0 .. score_4
+    private static final String KEY_SCORE_PREFIX = "score_";
 
-    public enum State { MENU, PLAYING, PAUSED, GAME_OVER }
+    public enum State { MENU, PLAYING, PAUSED, GAME_OVER, LEADERBOARD }
     public State state = State.MENU;
 
     public OrthographicCamera camera;
@@ -30,8 +32,6 @@ public class NullVoid extends ApplicationAdapter {
     public AudioManager audio;
 
     private Preferences prefs;
-
-    // Lifecycle
 
     @Override
     public void create() {
@@ -54,6 +54,7 @@ public class NullVoid extends ApplicationAdapter {
         audio.create();
 
         world.setHighScore(prefs.getInteger(KEY_HIGH_SCORE, 0));
+        loadLeaderboard();
     }
 
     @Override
@@ -70,6 +71,8 @@ public class NullVoid extends ApplicationAdapter {
                 state = State.GAME_OVER;
                 audio.stopBGM();
                 saveHighScore();
+                world.submitScore(world.getScore());
+                saveLeaderboard();
             }
         }
 
@@ -97,14 +100,16 @@ public class NullVoid extends ApplicationAdapter {
         audio.dispose();
     }
 
-    // Input
-
     private void handleInput() {
-        boolean pauseBtn = ui.wasPauseButtonPressed();
+        boolean pauseBtn       = ui.wasPauseButtonPressed();
+        boolean leaderboardBtn = ui.wasLeaderboardButtonPressed();
 
         switch (state) {
             case MENU:
-                // Touch allowed on menu to start
+                if (leaderboardBtn) {
+                    state = State.LEADERBOARD;
+                    break;
+                }
                 if (input.isStartWithTouch()) {
                     int savedBest = prefs.getInteger(KEY_HIGH_SCORE, 0);
                     world.reset();
@@ -123,7 +128,6 @@ public class NullVoid extends ApplicationAdapter {
                 break;
 
             case PAUSED:
-                // Mute checked before resume so a mute tap isn't also a resume
                 if (ui.wasMuteToggled()) audio.toggleMute();
                 if (input.isPause() || input.isStart()) {
                     state = State.PLAYING;
@@ -132,13 +136,23 @@ public class NullVoid extends ApplicationAdapter {
                 break;
 
             case GAME_OVER:
-                // Touch allowed on game over to restart
-                if (input.isStartWithTouch()) state = State.MENU;
+                if (leaderboardBtn) {
+                    state = State.LEADERBOARD;
+                    break;
+                }
+                if (input.isStartWithTouch()) {
+                    ui.hudHintTimer = 0f;
+                    state = State.MENU;
+                }
+                break;
+
+            case LEADERBOARD:
+                if (input.isBack() || input.isStart()) {
+                    state = State.MENU;
+                }
                 break;
         }
     }
-
-    // Persistence
 
     private void saveHighScore() {
         int current = prefs.getInteger(KEY_HIGH_SCORE, 0);
@@ -147,5 +161,19 @@ public class NullVoid extends ApplicationAdapter {
             prefs.putInteger(KEY_HIGH_SCORE, latest);
             prefs.flush();
         }
+    }
+
+    private void loadLeaderboard() {
+        int[] saved = new int[GameWorld.LEADERBOARD_SIZE];
+        for (int i = 0; i < GameWorld.LEADERBOARD_SIZE; i++)
+            saved[i] = prefs.getInteger(KEY_SCORE_PREFIX + i, 0);
+        world.setScores(saved);
+    }
+
+    private void saveLeaderboard() {
+        int[] s = world.getScores();
+        for (int i = 0; i < GameWorld.LEADERBOARD_SIZE; i++)
+            prefs.putInteger(KEY_SCORE_PREFIX + i, s[i]);
+        prefs.flush();
     }
 }
